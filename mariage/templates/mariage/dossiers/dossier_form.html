@@ -1,0 +1,452 @@
+{% extends 'mariage/base.html' %}
+
+{% block title %} Cœur de Saisie - {% if is_edit %}Modification{% else %}Ouverture{% endif %} de Dossier {% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="card shadow-sm border-0 mb-4 bg-light">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="fw-bold text-dark m-0"><i class="bi {% if is_edit %}bi-pencil-square{% else %}bi-folder-plus{% endif %} text-primary me-2"></i> {% if is_edit %}Modification du Dossier Unique N° {{ dossier.numero_dossier }}{% else %}Ouverture de Dossier Unique{% endif %}</h3>
+                <p class="text-muted m-0 small">Guichet unique d'enregistrement de l'État Civil</p>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-primary px-3 py-2 fs-6">Commune : {{ commune_agent.nom }}</span>
+                <p class="m-0 text-muted small mt-1">Saisie affectée automatiquement</p>
+            </div>
+        </div>
+    </div>
+
+    {% if etape_biometrie and not is_edit %}
+    <div class="card shadow border-0 col-md-8 mx-auto">
+        <div class="card-header bg-dark text-white fw-bold">
+            <i class="bi bi-fingerprint me-2 text-warning"></i> Vérification anti-polygamie
+        </div>
+        <div class="card-body text-center py-4">
+            <p class="text-muted fw-medium">
+                Vérification permettant de s'assurer que les deux prétendants ne sont pas engagés dans un autre mariage non dissous.
+            </p>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row my-4">
+                    <div class="col-md-6 border-end">
+                        <label class="fw-bold mb-2">Empreinte du Futur Époux</label>
+                        <input type="file" name="scan_empreinte_epoux" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold mb-2">Empreinte de la Future Épouse</label>
+                        <input type="file" name="scan_empreinte_epouse" class="form-control form-control-sm" required>
+                    </div>
+                </div>
+                <button type="submit" name="verifier_biometrie" class="btn btn-primary px-4 fw-bold">
+                    <i class="bi bi-shield-shaded me-2"></i> Interroger le Système
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% else %}
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <input type="hidden" name="e_empreinte_nom" value="{{ empreinte_epoux_valide|default:dossier.epoux.scan_empreinte }}">
+        <input type="hidden" name="f_empreinte_nom" value="{{ empreinte_epouse_valide|default:dossier.epouse.scan_empreinte }}">
+
+        <div class="row g-3 mb-3">
+            
+            <div class="col-md-6">
+                <div class="card h-100 shadow-sm border-0 border-top border-primary border-3">
+                    <div class="card-header bg-white fw-bold text-primary py-2 small">
+                        <i class="bi bi-person-fill me-2"></i> BLOC 1 : Identité du Futur Époux
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Nom *</label>
+                                <input type="text" name="e_nom" value="{{ epoux.nom|default:'' }}" class="form-control form-control-sm text-uppercase" required placeholder="Ex: MBUSA">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Postnom</label>
+                                <input type="text" name="e_postnom" value="{{ epoux.post_nom|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Prénom</label>
+                                <input type="text" name="e_prenom" value="{{ epoux.prenom|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Téléphone *</label>
+                                <input type="tel" name="e_tel" value="{{ epoux.telephone|default:'' }}" class="form-control form-control-sm" required>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">N° Carte d'Électeur/Id *</label>
+                                <input type="text" name="e_num_piece" value="{{ epoux.numero_piece|default:'' }}" class="form-control form-control-sm" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Photo de la Carte *</label>
+                                <input type="file" name="e_photo_carte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                            </div>
+                        </div>
+
+                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2">
+                            <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-primary"></i> Enregistrement Empreinte Époux *</label>
+                            <input type="file" name="e_scan_empreinte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                        </div>
+
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-primary" style="font-size: 0.8rem;" type="button" data-bs-toggle="modal" data-bs-target="#modalEpoux">
+                            <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card h-100 shadow-sm border-0 border-top border-danger border-3">
+                    <div class="card-header bg-white fw-bold text-danger py-2 small">
+                        <i class="bi bi-person-fill-heart me-2"></i> BLOC 2 : Identité de la Future Épouse
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Nom *</label>
+                                <input type="text" name="f_nom" value="{{ epouse.nom|default:'' }}" class="form-control form-control-sm text-uppercase" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Postnom</label>
+                                <input type="text" name="f_postnom" value="{{ epouse.post_nom|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Prénom</label>
+                                <input type="text" name="f_prenom" value="{{ epouse.prenom|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Téléphone *</label>
+                                <input type="tel" name="f_tel" value="{{ epouse.telephone|default:'' }}" class="form-control form-control-sm" required>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">N° Carte d'Électeur/Id *</label>
+                                <input type="text" name="f_num_piece" value="{{ epouse.numero_piece|default:'' }}" class="form-control form-control-sm" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Photo de la Carte *</label>
+                                <input type="file" name="f_photo_carte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                            </div>
+                        </div>
+
+                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2">
+                            <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-danger"></i> Enregistrement Empreinte Épouse *</label>
+                            <input type="file" name="f_scan_empreinte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                        </div>
+
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-danger" style="font-size: 0.8rem;" type="button" data-bs-toggle="modal" data-bs-target="#modalEpouse">
+                            <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="row g-3">
+            
+            <div class="col-md-7">
+                <div class="card h-100 shadow-sm border-0 border-top border-success border-3">
+                    <div class="card-header bg-white fw-bold text-success py-2 small">
+                        <i class="bi bi-people-fill me-2"></i> BLOC 3 : Les Témoins des Conjoints
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row g-3">
+                            <div class="col-md-6 border-end">
+                                <span class="badge bg-light text-success mb-2 w-100 text-start" style="font-size: 0.75rem;"><i class="bi bi-person"></i> Témoin du Futur Époux (T1)</span>
+                                <div class="mb-1">
+                                    <input type="text" name="t1_nom" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUX' %}{{ t.nom }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="Nom Complet *">
+                                </div>
+                                <div class="mb-1">
+                                    <input type="tel" name="t1_tel" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUX' %}{{ t.telephone }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="N° Téléphone *">
+                                </div>
+                                <div class="mb-1">
+                                    <input type="text" name="t1_num_piece" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUX' %}{{ t.numero_piece }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="N° Carte d'Électeur *">
+                                </div>
+                                <div>
+                                    <label class="text-muted mb-0" style="font-size: 0.65rem;">Fichier Carte d'Électeur</label>
+                                    <input type="file" name="t1_photo_carte" class="form-control form-control-sm">
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <span class="badge bg-light text-danger mb-2 w-100 text-start" style="font-size: 0.75rem;"><i class="bi bi-person-heart"></i> Témoin de la Future Épouse (T2)</span>
+                                <div class="mb-1">
+                                    <input type="text" name="t2_nom" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUSE' %}{{ t.nom }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="Nom Complet *">
+                                </div>
+                                <div class="mb-1">
+                                    <input type="tel" name="t2_tel" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUSE' %}{{ t.telephone }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="N° Téléphone *">
+                                </div>
+                                <div class="mb-1">
+                                    <input type="text" name="t2_num_piece" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUSE' %}{{ t.numero_piece }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="N° Carte d'Électeur *">
+                                </div>
+                                <div>
+                                    <label class="text-muted mb-0" style="font-size: 0.65rem;">Fichier Carte d'Électeur</label>
+                                    <input type="file" name="t2_photo_carte" class="form-control form-control-sm">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="collapse {% if is_edit %}show{% endif %}" id="plus_details_temoins">
+                            <div class="row g-2 pt-2 mt-2 border-top">
+                                <div class="col-md-6 border-end">
+                                    <input type="text" name="t1_profession" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUX' %}{{ t.profession|default:'' }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm mb-1" placeholder="Profession T1">
+                                    <input type="text" name="t1_adresse" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUX' %}{{ t.adresse|default:'' }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="Adresse/Quartier T1">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" name="t2_profession" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUSE' %}{{ t.profession|default:'' }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm mb-1" placeholder="Profession T2">
+                                    <input type="text" name="t2_adresse" value="{% if is_edit %}{% for t in dossier.temoins.all %}{% if t.provenance == 'EPOUSE' %}{{ t.adresse|default:'' }}{% endif %}{% endfor %}{% endif %}" class="form-control form-control-sm" placeholder="Adresse/Quartier T2">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none mt-2 fw-bold text-success" style="font-size: 0.8rem;" type="button" data-bs-toggle="collapse" data-bs-target="#plus_details_temoins" aria-expanded="false" aria-controls="plus_details_temoins">
+                            <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails témoins
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-5">
+                <div class="card h-100 shadow-sm border-0 border-top border-warning border-3">
+                    <div class="card-header bg-white fw-bold text-warning text-dark py-2 small">
+                        <i class="bi bi-cash-coin me-2"></i> BLOC 4 : Perception Financière Initiale
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Frais Totaux ($)</label>
+                                <input type="number" name="total_du" class="form-control form-control-sm" value="{{ paiement.montant_total_du|default:'50' }}" readonly>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-warning mb-1" style="font-size: 0.75rem;">Montant Versé ($) *</label>
+                                <input type="number" name="montant_paye" class="form-control form-control-sm bg-light fw-bold text-success" value="{{ paiement.montant_paye|default:'0' }}" required>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                            <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Mode de paiement</label>
+                            <select name="type_paiement" class="form-select form-select-sm">
+                                <option value="Especes" {% if paiement.type_paiement == "Especes" %}selected{% endif %}>Espèces / Caisse Physique</option>
+                                <option value="MobileMoney" {% if paiement.type_paiement == "MobileMoney" %}selected{% endif %}>AirtelMoney / Mobile Money</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="mt-3 card p-2 shadow-sm border-0 d-flex flex-row justify-content-between">
+            <a href="{% url 'dossier_list' %}" class="btn btn-outline-secondary px-3 btn-sm fw-bold">
+                <i class="bi bi-arrow-left"></i> Annuler
+            </a>
+            <button type="submit" name="enregistrer_coeur_saisie" class="btn btn-success px-4 btn-sm fw-bold">
+                {% if is_edit %}
+                    <i class="bi bi-cloud-check-fill me-2"></i> Enregistrer les modifications
+                {% else %}
+                    <i class="bi bi-cloud-check-fill me-2"></i> Valider et Ouvrir le Dossier
+                {% endif %}
+            </button>
+        </div>
+
+
+        <div class="modal fade" id="modalEpoux" tabindex="-1" aria-labelledby="modalEpouxLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header bg-primary text-white py-2">
+                        <h5 class="modal-title fw-bold small" id="modalEpouxLabel"><i class="bi bi-file-earmark-person-fill me-2"></i> Complément de Profil - Futur Époux</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-3">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Type de Pièce *</label>
+                                <input type="text" name="e_piece_identite" class="form-control form-control-sm" value="{{ epoux.type_piece|default:"Carte d'Électeur" }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Profession *</label>
+                                <input type="text" name="e_profession" class="form-control form-control-sm" value="{{ epoux.profession|default:'Sans' }}" placeholder="Ex: Enseignant, Indépendant">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Commune de Résidence *</label>
+                                <select name="e_commune_residence" class="form-select form-select-sm">
+                                    {% for c in communes %}
+                                        <option value="{{ c.id }}" {% if epoux.commune_residence_id == c.id %}selected{% endif %}>{{ c.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-12 hr border-top my-2"></div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted mb-1">Nom du Père</label>
+                                <input type="text" name="e_nom_pere" value="{{ epoux.nom_pere|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted mb-1">Nom de la Mère</label>
+                                <input type="text" name="e_nom_mere" value="{{ epoux.nom_mere|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Date de Naissance</label>
+                                <input type="date" name="e_date_naissance" value="{{ epoux.date_naissance|date:'Y-m-d' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Lieu de Naissance</label>
+                                <input type="text" name="e_lieu_naissance" value="{{ epoux.lieu_naissance|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Nationalité</label>
+                                <input type="text" name="e_nationalite" class="form-control form-control-sm" value="{{ epoux.nationalite|default:'Congolaise' }}">
+                            </div>
+
+                            <div class="col-12 hr border-top my-2"></div>
+
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Ville / Territoire d'Origine</label>
+                                <input type="text" name="e_ville_origine" value="{{ epoux.ville_origine|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Quartier</label>
+                                <input type="text" name="e_quartier" value="{{ epoux.quartier|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold text-muted mb-1">Cellule</label>
+                                <input type="text" name="e_cellule" value="{{ epoux.cellule|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold text-muted mb-1">N° Parcelle</label>
+                                <input type="text" name="e_numero_parcelle" value="{{ epoux.numero_parcelle|default:'' }}" class="form-control form-control-sm">
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Lieu Délivrance Pièce</label>
+                                <input type="text" name="e_lieu_delivrance" value="{{ epoux.lieu_delivrance_piece|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Date Délivrance Pièce</label>
+                                <input type="date" name="e_date_delivrance" value="{{ epoux.date_delivrance_piece|date:'Y-m-d' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Photo d'Identité (Profil)</label>
+                                <input type="file" name="e_photo" class="form-control form-control-sm">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer py-1 bg-light">
+                        <button type="button" class="btn btn-sm btn-primary px-4 fw-bold" data-bs-dismiss="modal">Fermer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modalEpouse" tabindex="-1" aria-labelledby="modalEpouseLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header bg-danger text-white py-2">
+                        <h5 class="modal-title fw-bold small" id="modalEpouseLabel"><i class="bi bi-file-earmark-person-fill me-2"></i> Complément de Profil - Future Épouse</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-3">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Type de Pièce *</label>
+                                <input type="text" name="f_piece_identite" class="form-control form-control-sm" value="{{ epouse.type_piece|default:"Carte d'Électeur" }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Profession *</label>
+                                <input type="text" name="f_profession" class="form-control form-control-sm" value="{{ epouse.profession|default:'Sans' }}" placeholder="Ex: Commerçante, Enseignante">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Commune de Résidence *</label>
+                                <select name="f_commune_residence" class="form-select form-select-sm">
+                                    {% for c in communes %}
+                                        <option value="{{ c.id }}" {% if epouse.commune_residence_id == c.id %}selected{% endif %}>{{ c.nom }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-12 hr border-top my-2"></div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted mb-1">Nom du Père</label>
+                                <input type="text" name="f_nom_pere" value="{{ epouse.nom_pere|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted mb-1">Nom de la Mère</label>
+                                <input type="text" name="f_nom_mere" value="{{ epouse.nom_mere|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Date de Naissance</label>
+                                <input type="date" name="f_date_naissance" value="{{ epouse.date_naissance|date:'Y-m-d' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Lieu de Naissance</label>
+                                <input type="text" name="f_lieu_naissance" value="{{ epouse.lieu_naissance|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Nationalité</label>
+                                <input type="text" name="f_nationalite" class="form-control form-control-sm" value="{{ epouse.nationalite|default:'Congolaise' }}">
+                            </div>
+
+                            <div class="col-12 hr border-top my-2"></div>
+
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Ville / Territoire d'Origine</label>
+                                <input type="text" name="f_ville_origine" value="{{ epouse.ville_origine|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Quartier</label>
+                                <input type="text" name="f_quartier" value="{{ epouse.quartier|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold text-muted mb-1">Cellule</label>
+                                <input type="text" name="f_cellule" value="{{ epouse.cellule|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold text-muted mb-1">N° Parcelle</label>
+                                <input type="text" name="f_numero_parcelle" value="{{ epouse.numero_parcelle|default:'' }}" class="form-control form-control-sm">
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Lieu Délivrance Pièce</label>
+                                <input type="text" name="f_lieu_delivrance" value="{{ epouse.lieu_delivrance_piece|default:'' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Date Délivrance Pièce</label>
+                                <input type="date" name="f_date_delivrance" value="{{ epouse.date_delivrance_piece|date:'Y-m-d' }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-muted mb-1">Photo d'Identité (Profil)</label>
+                                <input type="file" name="f_photo" class="form-control form-control-sm">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer py-1 bg-light">
+                        <button type="button" class="btn btn-sm btn-danger px-4 fw-bold" data-bs-dismiss="modal">Fermer</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </form>
+    {% endif %}
+
+</div>
+{% endblock %}

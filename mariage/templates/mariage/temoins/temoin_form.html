@@ -1,0 +1,38 @@
+{% extends 'mariage/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="mb-0 text-primary fw-bold"><i class="bi bi-person-plus me-2"></i> Enregistrement d'un Témoin</h5>
+            </div>
+            <div class="card-body p-4">
+                <form id="temoinForm" method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        {% for field in form %}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-uppercase">{{ field.label }}</label>
+                            {{ field }}
+                            <div class="invalid-feedback"></div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-4 d-flex justify-content-end gap-2">
+                        <a href="{% url 'temoin_list' %}" class="btn btn-light border">Annuler</a>
+                        <button type="submit" id="saveTemoinBtn" class="btn btn-primary px-4">Enregistrer le témoin</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Utilisation du gestionnaire AJAX global défini dans static/mariage/js/form_handler.js
+    handleAjaxForm('temoinForm', 'saveTemoinBtn');
+</script>
+{% endblock %}

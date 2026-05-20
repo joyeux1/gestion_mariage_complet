@@ -1,0 +1,44 @@
+{% extends 'mariage/base.html' %}
+
+{% block title %}Liste des Époux{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold text-dark">Liste des Époux</h2>
+    <a href="{% url 'epoux_create' %}" class="btn btn-primary shadow-sm">+ Nouvel Époux</a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light text-muted">
+                <tr>
+                    <th class="ps-4">Nom & Prénom</th>
+                    <th>Téléphone</th>
+                    <th>Ville d'origine</th>
+                    <th class="text-end pe-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for epoux in liste_epoux %}
+                <tr>
+                    <td class="ps-4">
+                        <div class="fw-bold">{{ epoux.nom }} {{ epoux.prenom }}</div>
+                        <span class="text-muted small">N° Pièce: {{ epoux.numero_piece }}</span>
+                    </td>
+                    <td>{{ epoux.telephone }}</td>
+                    <td>{{ epoux.ville_origine }}</td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-muted">Aucun époux enregistré.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

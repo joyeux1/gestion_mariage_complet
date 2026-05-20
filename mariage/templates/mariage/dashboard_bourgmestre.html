@@ -1,0 +1,81 @@
+{% extends 'mariage/base.html' %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h2 class="fw-bold mb-4">Tableau de Bord : Commune de {{ commune.nom }}</h2>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-primary text-white">
+                <div class="card-body p-4">
+                    <h6 class="text-uppercase small">Recettes Totales (Caisse)</h6>
+                    <h2 class="fw-bold mb-0">{{ solde }} $</h2>
+                    <i class="bi bi-cash-stack position-absolute end-0 bottom-0 m-3 fs-1 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-success text-white">
+                <div class="card-body p-4">
+                    <h6 class="text-uppercase small">Dossiers Enregistrés</h6>
+                    <h2 class="fw-bold mb-0">{{ nb_dossiers }}</h2>
+                    <i class="bi bi-folder-check position-absolute end-0 bottom-0 m-3 fs-1 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-dark text-white">
+                <div class="card-body p-4">
+                    <h6 class="text-uppercase small">Statut Système</h6>
+                    <h2 class="fw-bold mb-0 text-warning">Sécurisé</h2>
+                    <i class="bi bi-shield-lock position-absolute end-0 bottom-0 m-3 fs-1 opacity-25"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary">Évolution des Recettes (7 derniers jours)</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="recettesChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('recettesChart').getContext('2d');
+    const labels = [{% for entry in stats_graph %}"{{ entry.date }}",{% endfor %}];
+    const data = [{% for entry in stats_graph %}{{ entry.total }},{% endfor %}];
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Recettes journalières ($)',
+                data: data,
+                borderColor: '#0d6efd',
+                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                fill: true,
+                tension: 0.3,
+                borderWidth: 3,
+                pointBackgroundColor: '#0d6efd'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+</script>
+{% endblock %}

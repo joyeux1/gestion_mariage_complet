@@ -1,0 +1,57 @@
+{% extends 'mariage/base.html' %}
+
+{% block title %}Liste des Dossiers{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold"><i class="bi bi-folder2-open me-2"></i> Liste des Dossiers</h2>
+    <a href="{% url 'dossier_create' %}" class="btn btn-primary shadow-sm">+ Nouveau Dossier</a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0"> 
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">N° Dossier</th>
+                        <th>Date Dépôt</th>
+                        <th>Objet</th>
+                        <th class="text-center">Statut</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dossier in object_list %}
+                    <tr>
+                        <td class="ps-4 fw-bold text-primary">{{ dossier.numero_dossier }}</td>
+                        <td>{{ dossier.date_depot|date:"d/m/Y" }}</td>
+                        <td>{{ dossier.objet|default:"mariage civil" }}</td>
+                        <td class="text-center">
+                            <span class="badge rounded-pill {% if dossier.statut == 'valide' %}bg-success-subtle text-success border border-success-subtle{% else %}bg-warning-subtle text-warning border border-warning-subtle{% endif %}">
+                                {{ dossier.get_statut_display }}
+                            </span>
+                        </td>
+                        <td class="text-end pe-4">
+                            <a href="{% url 'dossier_edit' dossier.id %}" class="btn btn-sm btn-outline-warning me-1" title="Modifier le dossier">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                            
+                            {% if dossier.statut == 'valide' %}
+                            <a href="{% url 'mariage_create' %}?dossier={{ dossier.id }}" class="btn btn-sm btn-outline-primary" title="Célébrer">
+                                <i class="bi bi-heart"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5 text-muted">Aucun dossier enregistré pour le moment.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

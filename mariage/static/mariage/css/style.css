@@ -1,0 +1,61 @@
+/* static/mariage/css/style.css */
+:root {
+    --main-blue: #1a2d42;
+    --sidebar-bg: #ffffff;
+    --light-gray: #f4f7f6;
+    --primary-blue: #0d6efd;
+}
+
+body {
+    background-color: var(--light-gray);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* Navbar */
+.navbar-custom {
+    background-color: var(--main-blue);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Sidebar */
+.sidebar {
+    min-height: 100vh;
+    background: var(--sidebar-bg);
+    border-right: 1px solid #dee2e6;
+    padding-top: 20px;
+}
+
+.nav-link {
+    color: #444;
+    font-weight: 500;
+    padding: 12px 20px;
+    margin: 4px 10px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.nav-link:hover, .nav-link.active {
+    background-color: #eef2f7;
+    color: var(--primary-blue);
+}
+
+/* Cards & UI */
+.card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.badge-status {
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+/* Print optimizations for Mariage Detail */
+@media print {
+    .sidebar, .navbar, .btn-action { display: none !important; }
+    .main-content { width: 100%; margin: 0; padding: 0; }
+    .card { box-shadow: none; border: 1px solid #eee; }
+}

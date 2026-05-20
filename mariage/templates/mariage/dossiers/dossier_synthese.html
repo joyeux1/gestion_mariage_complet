@@ -1,0 +1,206 @@
+<form id="syntheseForm" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="finaliser_dossier" value="1">
+
+    <div class="row g-4">
+        
+        <div class="col-xl-6">
+            <div class="card border-0 shadow-sm border-top border-primary border-4 h-100">
+                <div class="card-body">
+                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-fill me-2"></i> BLOC 1 : Identité du Futur Époux</h6>
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="small fw-bold text-muted">Nom *</label>
+                            <input type="text" name="e_nom" class="form-control text-uppercase" required placeholder="Ex: MBUSA">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">Postnom</label>
+                            <input type="text" name="e_postnom" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">Prénom</label>
+                            <input type="text" name="e_prenom" class="form-control">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="small fw-bold text-muted">Téléphone *</label>
+                            <input type="tel" name="e_tel" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">N° Carte d'Électeur/Id *</label>
+                            <input type="text" name="e_num_piece" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">Commune Résidence *</label>
+                            <select name="e_commune" class="form-select" required>
+                                <option value="{{ affectation.id }}">{{ affectation.nom }}</option>
+                                </select>
+                        </div>
+
+                        <div class="collapse w-100" id="details_epoux">
+                            <div class="row g-3 pt-2 mx-0">
+                                <div class="col-md-12 px-0">
+                                    <label class="small fw-bold text-muted">Profession</label>
+                                    <input type="text" name="e_prof" class="form-control" placeholder="Ex: Enseignant">
+                                </div>
+                                <div class="col-md-12 px-0">
+                                    <label class="small fw-bold text-muted">Photo de la Carte / Pièce</label>
+                                    <input type="file" name="e_photo_piece" class="form-control">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-link btn-sm p-0 text-decoration-none mt-3 fw-bold text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#details_epoux" aria-expanded="false" aria-controls="details_epoux">
+                        <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            <div class="card border-0 shadow-sm border-top border-danger border-4 h-100">
+                <div class="card-body">
+                    <h6 class="fw-bold text-danger mb-3"><i class="bi bi-person-fill-heart me-2"></i> BLOC 2 : Identité de la Future Épouse</h6>
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="small fw-bold text-muted">Nom *</label>
+                            <input type="text" name="f_nom" class="form-control text-uppercase" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">Postnom</label>
+                            <input type="text" name="f_postnom" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">Prénom</label>
+                            <input type="text" name="f_prenom" class="form-control">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="small fw-bold text-muted">Téléphone *</label>
+                            <input type="tel" name="f_tel" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">N° Carte d'Électeur/Id *</label>
+                            <input type="text" name="f_num_piece" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold text-muted">Commune Résidence *</label>
+                            <select name="f_commune" class="form-select" required>
+                                <option value="{{ affectation.id }}">{{ affectation.nom }}</option>
+                            </select>
+                        </div>
+
+                        <div class="collapse w-100" id="details_epouse">
+                            <div class="row g-3 pt-2 mx-0">
+                                <div class="col-md-12 px-0">
+                                    <label class="small fw-bold text-muted">Profession</label>
+                                    <input type="text" name="f_prof" class="form-control">
+                                </div>
+                                <div class="col-md-12 px-0">
+                                    <label class="small fw-bold text-muted">Photo de la Carte / Pièce</label>
+                                    <input type="file" name="f_photo_piece" class="form-control">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-link btn-sm p-0 text-decoration-none mt-3 fw-bold text-danger" type="button" data-bs-toggle="collapse" data-bs-target="#details_epouse" aria-expanded="false" aria-controls="details_epouse">
+                        <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <h6 class="fw-bold text-success mb-3"><i class="bi bi-people-fill me-2"></i> BLOC 3 : Témoin Principal des Conjoints</h6>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <input type="text" name="t_nom" class="form-control form-control-sm" placeholder="Nom *" required>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" name="t_postnom" class="form-control form-control-sm" placeholder="Postnom">
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" name="t_prenom" class="form-control form-control-sm" placeholder="Prénom">
+                        </div>
+                        <div class="col-md-12 mt-2">
+                            <input type="tel" name="t_tel" class="form-control form-control-sm" placeholder="Téléphone *">
+                        </div>
+
+                        <div class="collapse w-100" id="details_temoin">
+                            <div class="row g-2 pt-2 mx-0">
+                                <div class="col-md-12 px-0">
+                                    <input type="text" name="t_num_piece" class="form-control form-control-sm" placeholder="N° Carte d'Identité">
+                                </div>
+                                <div class="col-md-12 px-0">
+                                    <label class="small fw-bold text-muted">Photo de la Pièce du Témoin</label>
+                                    <input type="file" name="t_photo_piece" class="form-control form-control-sm">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-link btn-sm p-0 text-decoration-none mt-3 fw-bold text-success" type="button" data-bs-toggle="collapse" data-bs-target="#details_temoin">
+                        <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm bg-dark text-white h-100 border-start border-warning border-4">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold text-warning mb-0"><i class="bi bi-cash-coin me-2"></i> BLOC 4 : Finances & Droits du Dossier</h6>
+                            <span class="badge bg-secondary">Caisse : {{ affectation.nom }}</span>
+                        </div>
+                        
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="small fw-bold text-light">Frais Fixes ($) *</label>
+                                <input type="number" name="total_du" class="form-control form-control-sm bg-secondary text-white border-0" value="50" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small fw-bold text-warning">Montant perçu ($) *</label>
+                                <input type="number" name="montant_paye" class="form-control form-control-sm border-warning bg-transparent text-white fw-bold" placeholder="0.00" required>
+                            </div>
+                            
+                            <div class="collapse w-100" id="details_finance">
+                                <div class="col-12 pt-2">
+                                    <label class="small text-muted">Canal de Règlement</label>
+                                    <select name="type_paiement" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                        <option value="CASH">Espèces / Caisse Physique</option>
+                                        <option value="MOBILE">Mobile Money (M-Pesa / Airtel / Orange)</option>
+                                        <option value="BANQUE">Versement Bancaire</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-2">
+                        <button class="btn btn-link btn-sm text-warning text-decoration-none p-0 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#details_finance">
+                            <i class="bi bi-sliders me-1"></i> Ajouter plus de détails
+                        </button>
+                    </div>
+
+                    <div class="col-12 mt-3 pt-2 border-top border-secondary">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small text-uppercase text-muted">Solde en coffre :</span>
+                            <h5 class="fw-bold text-success mb-0">$ {{ affectation.caissecommune.solde_actuel|default:"0.00" }}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <div class="text-center mt-5 mb-5">
+        <button type="submit" class="btn btn-success btn-lg px-5 py-3 shadow fw-bold">
+            <i class="bi bi-cloud-check-fill me-2"></i> ENREGISTRER LE DOSSIER UNIQUE
+        </button>
+    </div>
+</form>

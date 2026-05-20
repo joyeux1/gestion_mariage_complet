@@ -1,0 +1,70 @@
+{% extends 'mariage/base.html' %}
+{% load static %}
+
+{% block title %}Acte de Mariage n° {{ object.numero_acte }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
+    <a href="{% url 'mariage_list' %}" class="btn btn-light border shadow-sm">
+        <i class="bi bi-arrow-left"></i> Retour
+    </a>
+    <button onclick="window.print();" class="btn btn-dark shadow-sm">
+        <i class="bi bi-printer-fill me-2"></i> Générer l'Acte Officiel (PDF)
+    </button>
+</div>
+
+<div class="card border-1 shadow-sm mx-auto p-4" style="max-width: 850px; background: white; border: 1px solid #ddd;">
+    <div class="card-body">
+        
+        <div class="text-center mb-5">
+            <h5 class="fw-bold mb-0">RÉPUBLIQUE DÉMOCRATIQUE DU CONGO</h5>
+            <div class="small text-uppercase">Province du Nord-Kivu</div>
+            <div class="small fw-bold">VILLE DE BUTEMBO | COMMUNE DE {{ object.dossier.commune.nom|upper }}</div>
+            <div style="border-top: 3px double #000; width: 200px; margin: 10px auto;"></div>
+            <h3 class="fw-bold mt-4" style="font-family: 'Times New Roman', serif;">EXTRAIT D'ACTE DE MARIAGE</h3>
+            <div class="fw-bold">N° {{ object.numero_acte }}</div>
+        </div>
+
+        <div style="font-family: 'Times New Roman', serif; font-size: 1.15rem; line-height: 1.8; text-align: justify;">
+            <p>
+                L'an deux mille <strong>{{ object.date_mariage|date:"Y" }}</strong>, 
+                le <strong>{{ object.date_mariage|date:"d" }}</strong> du mois de <strong>{{ object.date_mariage|date:"F" }}</strong>, 
+                devant Nous, <strong>{{ user.get_full_name|upper }}</strong>, {{ user.get_role_display }}, 
+                Officier de l'État Civil de la Commune de {{ object.dossier.commune.nom }}, ont comparu publiquement :
+            </p>
+
+            <div class="ms-4 my-4">
+                <p class="mb-1"><strong>L'ÉPOUX :</strong> {{ object.epoux.nom }} {{ object.epoux.prenom }}, né à {{ object.epoux.lieu_naissance }} le {{ object.epoux.date_naissance|date:"d/m/Y" }}.</p>
+                <p><strong>L'ÉPOUSE :</strong> {{ object.epouse.nom }} {{ object.epouse.prenom }}, née à {{ object.epouse.lieu_naissance }} le {{ object.epouse.date_naissance|date:"d/m/Y" }}.</p>
+            </div>
+
+            <p>
+                Lesquels ont déclaré vouloir se prendre pour époux sous le régime de : 
+                <strong>{{ object.get_regime_matrimonial_display|upper }}</strong>.
+                Nous avons prononcé, au nom de la Loi, qu'ils sont unis par le mariage.
+            </p>
+
+            <p class="small text-muted fst-italic">
+                <strong>Remarque :</strong> {{ object.remarque|default:"Néant." }}
+            </p>
+        </div>
+
+        <div class="row mt-5 pt-4 text-center">
+            <div class="col-4">
+                <div class="small fw-bold mb-5 text-decoration-underline">L'Époux</div>
+                <div class="mt-4 small text-muted">(Signature)</div>
+            </div>
+            <div class="col-4">
+                <div class="small fw-bold mb-5 text-decoration-underline">L'Épouse</div>
+                <div class="mt-4 small text-muted">(Signature)</div>
+            </div>
+            <div class="col-4">
+                <div class="small fw-bold mb-4">L'Autorité Compétente</div>
+                <div style="height: 60px;"></div> 
+                <div class="small fw-bold text-uppercase">{{ user.get_full_name|default:user.username }}</div>
+                <div class="small text-muted">{{ user.get_role_display }}</div> 
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

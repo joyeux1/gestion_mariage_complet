@@ -1,0 +1,67 @@
+{% extends 'mariage/base.html' %}
+
+{% block title %}Enregistrement Paiement{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-success text-white py-3 d-flex align-items-center">
+                <i class="bi bi-cash-stack fs-3 me-3"></i>
+                <div>
+                    <h5 class="mb-0 fw-bold">Perception des Frais</h5>
+                    <small class="opacity-75">Enregistrement du versement pour le dossier</small>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form id="paiementForm" method="post" novalidate>
+                    {% csrf_token %}
+                    
+                    <div class="row g-3">
+                        {% for field in form %}
+                        <div class="col-md-12 mb-2">
+                            <label class="form-label fw-bold small text-muted text-uppercase">
+                                {{ field.label }}
+                            </label>
+                            <div class="input-group">
+                                {% if "montant" in field.name %}
+                                    <span class="input-group-text bg-light"><i class="bi bi-currency-exchange"></i></span>
+                                {% elif "date" in field.name %}
+                                    <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
+                                {% endif %}
+                                {{ field }}
+                                <div class="invalid-feedback" id="err-{{ field.name }}"></div>
+                            </div>
+                            {% if field.help_text %}
+                                <div class="form-text x-small text-info">{{ field.help_text }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="alert alert-warning mt-4 py-2 border-0 small">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Assurez-vous que le montant correspond au libellé du bordereau bancaire.
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'dossier_list' %}" class="btn btn-light border">Annuler</a>
+                        <button type="submit" id="savePaiementBtn" class="btn btn-success px-4 shadow-sm">
+                            <i class="bi bi-check-all me-1"></i> Valider le Paiement
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Utilisation du gestionnaire AJAX global
+    handleAjaxForm('paiementForm', 'savePaiementBtn');
+</script>
+{% endblock %}

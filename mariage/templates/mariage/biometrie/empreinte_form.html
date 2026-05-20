@@ -1,0 +1,57 @@
+{% extends 'mariage/base.html' %}
+{% load static %}
+
+{% block title %}Capture Biométrique{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center">
+                <i class="bi bi-fingerprint text-primary fs-3 me-3"></i>
+                <h5 class="mb-0 fw-bold">Capture de l'Empreinte Digitale</h5>
+            </div>
+            <div class="card-body p-4 text-center">
+                <p class="text-muted small mb-4">Veuillez placer le doigt sur le lecteur pour l'enregistrement biométrique.</p>
+                
+                <div class="scanner-zone mb-4 py-5 bg-light rounded-circle mx-auto" style="width: 150px; height: 150px; border: 2px dashed #0d6efd;">
+                    <i class="bi bi-fingerprint text-primary" style="font-size: 4rem; opacity: 0.5;" id="fingerprint-icon"></i>
+                </div>
+
+                <form id="biometrieForm" method="post">
+                    {% csrf_token %}
+                    <div class="text-start mb-3">
+                        {% for field in form %}
+                            <label class="form-label fw-bold small text-muted text-uppercase">{{ field.label }}</label>
+                            {{ field }}
+                            <div class="invalid-feedback"></div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="button" id="scanBtn" class="btn btn-outline-primary">
+                            <i class="bi bi-cpu me-2"></i> Initialiser le Lecteur
+                        </button>
+                        <button type="submit" id="saveBiometrieBtn" class="btn btn-primary" disabled>
+                            <i class="bi bi-check-circle me-2"></i> Enregistrer l'empreinte
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'mariage/js/biometrie_handler.js' %}"></script>
+<script>
+    // Initialisation du traitement AJAX
+    handleAjaxForm('biometrieForm', 'saveBiometrieBtn');
+    
+    // Logique spécifique au scan
+    document.getElementById('scanBtn').addEventListener('click', function() {
+        startFingerprintScan();
+    });
+</script>
+{% endblock %}
