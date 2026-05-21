@@ -16,6 +16,9 @@
                     <tr>
                         <th class="ps-4">N° Dossier</th>
                         <th>Date Dépôt</th>
+                        <th>Futur Époux</th>
+                        <th>Future Épouse</th>
+                        <th class="text-center">Photos Conjoints</th>
                         <th>Objet</th>
                         <th class="text-center">Statut</th>
                         <th class="text-end pe-4">Actions</th>
@@ -25,14 +28,56 @@
                     {% for dossier in object_list %}
                     <tr>
                         <td class="ps-4 fw-bold text-primary">{{ dossier.numero_dossier }}</td>
+                        
                         <td>{{ dossier.date_depot|date:"d/m/Y" }}</td>
-                        <td>{{ dossier.objet|default:"mariage civil" }}</td>
+                        
+                        <td>
+                            {% if dossier.epoux %}
+                                <span class="fw-semibold text-dark d-block">{{ dossier.epoux.nom }} {{ dossier.epoux.post_nom }}</span>
+                                <small class="text-muted" style="font-size: 0.85rem;">{{ dossier.epoux.prenom }}</small>
+                            {% else %}
+                                <span class="text-muted small italic">Non renseigné</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            {% if dossier.epouse %}
+                                <span class="fw-semibold text-dark d-block">{{ dossier.epouse.nom }} {{ dossier.epouse.post_nom }}</span>
+                                <small class="text-muted" style="font-size: 0.85rem;">{{ dossier.epouse.prenom }}</small>
+                            {% else %}
+                                <span class="text-muted small italic">Non renseigné</span>
+                            {% endif %}
+                        </td>
+                        
                         <td class="text-center">
-                            <span class="badge rounded-pill {% if dossier.statut == 'valide' %}bg-success-subtle text-success border border-success-subtle{% else %}bg-warning-subtle text-warning border border-warning-subtle{% endif %}">
-                                {{ dossier.get_statut_display }}
+                            <div class="d-flex justify-content-center gap-2">
+                                {% if dossier.epoux and dossier.epoux.photo %}
+                                    <img src="{{ dossier.epoux.photo.url }}" alt="Époux" class="rounded-circle border border-2 border-primary" style="width: 38px; height: 38px; object-fit: cover;" title="Époux: {{ dossier.epoux.nom }}">
+                                {% else %}
+                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border border-secondary border-opacity-25" style="width: 38px; height: 38px;" title="Pas de photo époux">
+                                        <i class="bi bi-person text-secondary"></i>
+                                    </div>
+                                {% endif %}
+
+                                {% if dossier.epouse and dossier.epouse.photo %}
+                                    <img src="{{ dossier.epouse.photo.url }}" alt="Épouse" class="rounded-circle border border-2 border-danger" style="width: 38px; height: 38px; object-fit: cover;" title="Épouse: {{ dossier.epouse.nom }}">
+                                {% else %}
+                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border border-secondary border-opacity-25" style="width: 38px; height: 38px;" title="Pas de photo épouse">
+                                        <i class="bi bi-person-female text-secondary"></i>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        
+                        <td>{{ dossier.objet|default:"mariage civil" }}</td>
+                        
+                        <td class="text-center">
+                            <span class="badge rounded-pill {% if dossier.statut == 'valide' or dossier.statut == 'Ouvert' or dossier.statut == 'ouvert' %}bg-success-subtle text-success border border-success-subtle{% else %}bg-warning-subtle text-warning border border-warning-subtle{% endif %}">
+                                {{ dossier.get_statut_display|default:dossier.statut }}
                             </span>
                         </td>
-                        <td class="text-end pe-4">
+                        
+                        <td class="text-end pe-4 text-nowrap">
                             <a href="{% url 'dossier_edit' dossier.id %}" class="btn btn-sm btn-outline-warning me-1" title="Modifier le dossier">
                                 <i class="bi bi-pencil-square"></i>
                             </a>
@@ -46,7 +91,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">Aucun dossier enregistré pour le moment.</td>
+                        <td colspan="8" class="text-center py-5 text-muted">Aucun dossier enregistré pour le moment.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

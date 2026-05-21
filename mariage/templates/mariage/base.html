@@ -38,33 +38,30 @@
             <nav class="col-md-2 d-none d-md-block sidebar">
                 <ul class="nav flex-column">
                     <li class="nav-item">
-                        <a class="nav-link {% if 'dossier' in request.path %}active{% endif %}" href="{% url 'dossier_list' %}">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
+                            <i class="bi bi-speedometer2 me-2"></i> Tableau de bord
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'dossier' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'dossier_list' %}">
                             <i class="bi bi-folder-fill me-2"></i> Dossiers
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'epoux' in request.path %}active{% endif %}" href="{% url 'epoux_list' %}">
-                            <i class="bi bi-people-fill me-2"></i> Époux / Épouses
+                        <a class="nav-link {% if 'mariage' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'mariage_list' %}">
+                            <i class="bi bi-heart-fill me-2"></i> Mariage
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if 'mariage' in request.path %}active{% endif %}" href="{% url 'mariage_list' %}">
-                            <i class="bi bi-heart-fill me-2"></i> Mariages
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'temoin' in request.path %}active{% endif %}" href="{% url 'temoin_list' %}">
-                            <i class="bi bi-person-badge-fill me-2"></i> Témoins
+                        <a class="nav-link {% if 'divorce' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'divorce_list' %}">
+                            <i class="bi bi-heartbreak-fill me-2"></i> Divorce
                         </a>
                     </li>
 
                     {% if user.is_superuser or user.userprofile.role == 'BOURGMESTRE' %}
-                        <li class="nav-item mt-3 border-top pt-2">
-                            <span class="text-muted px-3 small text-uppercase fw-bold">Finances</span>
-                        </li>
                         <li class="nav-item">
-                            <a class="nav-link text-warning" href="{% url 'bourgmestre_dashboard' %}">
-                                <i class="bi bi-speedometer2 me-2"></i> Caisse Commune
+                            <a class="nav-link text-warning {% if 'bourgmestre' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'bourgmestre_dashboard' %}">
+                                <i class="bi bi-cash-coin me-2"></i> Caisse de la commune pour les frais du mariage
                             </a>
                         </li>
                     {% endif %}
@@ -72,12 +69,13 @@
                     {% if user.is_superuser %}
                         <li class="nav-item mt-2">
                             <a class="nav-link text-danger fw-bold" href="/admin/" target="_blank">
-                                <i class="bi bi-sliders me-2"></i> Admin Django
+                                <i class="bi bi-sliders me-2"></i> Autres
                             </a>
                         </li>
                     {% endif %}
                 </ul>
             </nav>
+
             <main class="col-md-10 ms-sm-auto px-md-4 py-4 main-content">
                 <div id="toast-container" class="position-fixed top-0 end-0 p-3"></div>
                 {% block content %}{% endblock %}
@@ -89,4 +87,3 @@
     <script src="{% static 'mariage/js/form_handler.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
-</html>

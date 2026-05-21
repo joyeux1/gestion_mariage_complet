@@ -50,8 +50,13 @@
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         
-        <input type="hidden" name="e_empreinte_nom" value="{{ empreinte_epoux_valide|default:dossier.epoux.scan_empreinte }}">
-        <input type="hidden" name="f_empreinte_nom" value="{{ empreinte_epouse_valide|default:dossier.epouse.scan_empreinte }}">
+        {% if is_edit %}
+            <input type="hidden" name="e_empreinte_nom" value="{{ empreinte_epoux_valide|default:dossier.epoux_id|default:'' }}">
+            <input type="hidden" name="f_empreinte_nom" value="{{ empreinte_epouse_valide|default:dossier.epouse_id|default:'' }}">
+        {% else %}
+            <input type="hidden" name="e_empreinte_nom" value="{{ empreinte_epoux_valide|default:'' }}">
+            <input type="hidden" name="f_empreinte_nom" value="{{ empreinte_epouse_valide|default:'' }}">
+        {% endif %}
 
         <div class="row g-3 mb-3">
             

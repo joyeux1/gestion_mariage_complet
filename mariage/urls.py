@@ -51,6 +51,7 @@ urlpatterns = [
     # ==========================
     # 6. RUPTURE ET BIOMÉTRIE
     # ==========================
+    path('divorces/', views.DivorceListView.as_view(), name='divorce_list'),
     path('divorce/nouveau/', views.DivorceCreateView.as_view(), name='divorce_create'),
     path('empreinte/nouveau/', views.EmpreinteCreateView.as_view(), name='empreinte_create'),
 

@@ -1,0 +1,190 @@
+{% extends 'mariage/base.html' %}
+{% load static %}
+
+{% block title %}Registre des Divorces{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    
+    <div id="divorce-list-wrapper">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="fw-bold text-dark"><i class="bi bi-heartbreak-fill text-dark me-2"></i> Registre National des Divorces</h2>
+                <p class="text-muted mb-0">Historique des 20 dernières ruptures d'unions enregistrées (Toutes Provinces)</p>
+            </div>
+            <button class="btn btn-danger shadow-sm" onclick="passerAuFormulaireDivorce()">
+                <i class="bi bi-plus-slash-minus me-2"></i> Nouveau Divorce
+            </button>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Code Rupture</th>
+                                <th>Ancien Époux</th>
+                                <th>Ancienne Épouse</th>
+                                <th>Acte de Mariage Dissout</th>
+                                <th>Date d'Enregistrement</th>
+                                <th>Tribunal Jugement</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for divorce in divorces|slice:":20" %}
+                            <tr>
+                                <td class="ps-4 text-danger fw-bold">DIV-{{ divorce.id|default:"2026" }}</td>
+                                <td>{{ divorce.epoux_nom }}</td>
+                                <td>{{ divorce.epouse_nom }}</td>
+                                <td class="fw-semibold text-primary">N° {{ divorce.mariage_acte_num }}</td>
+                                <td>{{ divorce.date_divorce|date:"d/m/Y"|default:"21/05/2026" }}</td>
+                                <td><span class="badge bg-secondary">Tribunal de Grande Instance</span></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-heartbreak display-4 d-block mb-3"></i> Aucun divorce enregistré dans le système.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="divorce-form-wrapper" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="fw-bold text-dark"><i class="bi bi-search me-2"></i> Recherche de l'Acte de Mariage Référent</h3>
+                <p class="text-muted mb-0">Sélectionnez le mariage initial pour appliquer la procédure légale de dissolution</p>
+            </div>
+            <button class="btn btn-outline-secondary" onclick="revenirALaListeDivorce()"><i class="bi bi-arrow-left"></i> Annuler</button>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-primary text-white py-3 fw-bold">
+                        <i class="bi bi-fingerprint me-2"></i> Axe 1 : Double Authentification Biométrique
+                    </div>
+                    <div class="card-body text-center d-flex flex-column justify-content-center py-5">
+                        <p class="text-muted px-3">Les deux mariés doivent poser simultanément leurs empreintes sur le lecteur biométrique.</p>
+                        <div class="d-flex justify-content-center gap-4 my-4">
+                            <div>
+                                <i class="bi bi-fingerprint text-secondary display-3 scan-finger" id="finger1" onclick="activerScanner(1)"></i>
+                                <div class="small fw-bold mt-1">Époux</div>
+                            </div>
+                            <div>
+                                <i class="bi bi-fingerprint text-secondary display-3 scan-finger" id="finger2" onclick="activerScanner(2)"></i>
+                                <div class="small fw-bold mt-1">Épouse</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary mx-auto col-8" onclick="simulerRechercheBiometriqueGlobale()">
+                            <i class="bi bi-search"></i> Scanner et Interroger les Communes
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-dark text-white py-3 fw-bold">
+                        <i class="bi bi-alphabet-uppercase me-2"></i> Axe 2 : Recherche Nominative Comparée
+                    </div>
+                    <div class="card-body py-4">
+                        <p class="text-muted">Recherche alphabétique sur l'intégralité des post-noms des époux enregistrés.</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Saisir le Post-nom de l'époux</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person-filter"></i></span>
+                                <input type="text" id="postnom_epoux_input" class="form-control" placeholder="Ex: MBUSA...">
+                            </div>
+                        </div>
+                        <button class="btn btn-dark w-100" onclick="simulerRecherchePostnom()">
+                            <i class="bi bi-cpu-fill me-2"></i> Comparer et Filtrer le Système
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mt-4 d-none" id="resultats-mariages-divorce">
+            <div class="card-header bg-success text-white fw-bold">
+                <i class="bi bi-check2-square me-2"></i> Actes de Mariage Identifiés correspondants
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>N° Acte</th>
+                                <th>Identité Époux</th>
+                                <th>Identité Épouse</th>
+                                <th>Lieu de célébration</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-mariage-divorce-rows">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function passerAuFormulaireDivorce() {
+        document.getElementById('divorce-list-wrapper').className = 'd-none';
+        document.getElementById('divorce-form-wrapper').className = 'd-block';
+    }
+    function revenirALaListeDivorce() {
+        document.getElementById('divorce-form-wrapper').className = 'd-none';
+        document.getElementById('divorce-list-wrapper').className = 'd-block';
+    }
+    function activerScanner(id) {
+        document.getElementById('finger'+id).className = "bi bi-fingerprint text-success display-3 scan-finger animate-pulse";
+    }
+    function simulerRechercheBiometriqueGlobale() {
+        document.getElementById('finger1').className = "bi bi-fingerprint text-success display-3 scan-finger";
+        document.getElementById('finger2').className = "bi bi-fingerprint text-success display-3 scan-finger";
+        afficherResultatsMariage();
+    }
+    function simulerRecherchePostnom() {
+        var val = document.getElementById('postnom_epoux_input').value;
+        if(!val) { alert("Veuillez saisir un postnom pour exécuter le comparateur."); return; }
+        afficherResultatsMariage();
+    }
+    function afficherResultatsMariage() {
+        document.getElementById('resultats-mariages-divorce').classList.remove('d-none');
+        var tbody = document.getElementById('table-mariage-divorce-rows');
+        tbody.innerHTML = `
+            <tr>
+                <td class="fw-bold text-primary">N° 2024/BUL/412</td>
+                <td>KASEREKA <strong>MBUSA</strong> Joyeux</td>
+                <td>KAVIRA MASIKA Alliance</td>
+                <td>Commune Bulengera (Butembo)</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-danger" onclick="validerRuptureDefinitive()">Dissoudre ce Mariage</button>
+                </td>
+            </tr>
+        `;
+    }
+    function validerRuptureDefinitive() {
+        if(confirm("Confirmez-vous l'annulation légale et l'enregistrement du divorce associé à cet acte ?")) {
+            alert("L'acte de mariage a été révoqué. Le divorce est officiellement inséré dans le registre.");
+            window.location.reload();
+        }
+    }
+</script>
+<style>
+    .scan-finger { cursor: pointer; transition: all 0.3s ease; }
+    .scan-finger:hover { transform: scale(1.1); }
+</style>
+{% endblock %}

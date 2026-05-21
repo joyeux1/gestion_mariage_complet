@@ -417,6 +417,8 @@ class TemoinCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
 # ==========================================
 # 6. LE MARIAGE (Acte Final)
 # ==========================================
+# MARIAGE
+# =================================
 
 class MariageListView(LoginRequiredMixin, ListView):
     model = Mariage
@@ -451,7 +453,7 @@ class MariageUpdateView(SmartSecurityMixin, AjaxFormMixin, UpdateView):
 class DivorceListView(SmartSecurityMixin, ListView):
     allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE']
     model = Divorce
-    template_name = 'mariage/mariages/divorce_list.html'
+    template_name = 'mariage/divorces/divorce_list.html'
 
 
 class DivorceCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
