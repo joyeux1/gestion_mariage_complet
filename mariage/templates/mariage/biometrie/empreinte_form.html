@@ -5,20 +5,30 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
+    <div class="col-md-8 col-lg-6">
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3 border-bottom d-flex align-items-center">
                 <i class="bi bi-fingerprint text-primary fs-3 me-3"></i>
                 <h5 class="mb-0 fw-bold">Capture de l'Empreinte Digitale</h5>
             </div>
             <div class="card-body p-4 text-center">
-                <p class="text-muted small mb-4">Veuillez placer le doigt sur le lecteur pour l'enregistrement biométrique.</p>
-                
-                <div class="scanner-zone mb-4 py-5 bg-light rounded-circle mx-auto" style="width: 150px; height: 150px; border: 2px dashed #0d6efd;">
-                    <i class="bi bi-fingerprint text-primary" style="font-size: 4rem; opacity: 0.5;" id="fingerprint-icon"></i>
-                </div>
+                <p class="text-muted small mb-4">Veuillez placer le doigt sur le lecteur ou utiliser la webcam pour l'enregistrement biométrique.</p>
 
-                <form id="biometrieForm" method="post">
+                <div class="scanner-zone mb-4 mx-auto d-flex align-items-center justify-content-center gap-3 p-3 bg-light rounded-4"
+                     style="width: fit-content; border: 2px dashed #0d6efd;">
+                    <div class="scanner-icon-wrap rounded-circle d-flex align-items-center justify-content-center bg-white flex-shrink-0"
+                         style="width: 150px; height: 150px; border: 2px dashed #0d6efd;">
+                        <i class="bi bi-fingerprint text-primary" style="font-size: 4rem; opacity: 0.5;" id="fingerprint-icon"></i>
+                    </div>
+                    <div class="webcam-wrap rounded-circle overflow-hidden d-flex align-items-center justify-content-center bg-dark flex-shrink-0"
+                         style="width: 150px; height: 150px; border: 2px dashed #0d6efd;">
+                        <video id="webcam" autoplay playsinline
+                               style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    </div>
+                </div>
+                <canvas id="canvas" style="display:none;"></canvas>
+
+                <form id="biometrieForm" method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <div class="text-start mb-3">
                         {% for field in form %}
@@ -29,11 +39,11 @@
                     </div>
 
                     <div class="d-grid gap-2">
-                        <button type="button" id="scanBtn" class="btn btn-outline-primary">
-                            <i class="bi bi-cpu me-2"></i> Initialiser le Lecteur
+                        <button type="button" id="cameraBtn" class="btn btn-outline-primary">
+                            <i class="bi bi-camera-video me-2"></i> Démarrer la Caméra / Capturer la Photo
                         </button>
                         <button type="submit" id="saveBiometrieBtn" class="btn btn-primary" disabled>
-                            <i class="bi bi-check-circle me-2"></i> Enregistrer l'empreinte
+                            <i class="bi bi-check-circle me-2"></i> Enregistrer
                         </button>
                     </div>
                 </form>
@@ -46,12 +56,10 @@
 {% block extra_js %}
 <script src="{% static 'mariage/js/biometrie_handler.js' %}"></script>
 <script>
-    // Initialisation du traitement AJAX
     handleAjaxForm('biometrieForm', 'saveBiometrieBtn');
-    
-    // Logique spécifique au scan
-    document.getElementById('scanBtn').addEventListener('click', function() {
-        startFingerprintScan();
+
+    document.getElementById('cameraBtn').addEventListener('click', function () {
+        toggleWebcamCapture();
     });
 </script>
 {% endblock %}
