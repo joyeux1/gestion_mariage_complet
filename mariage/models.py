@@ -65,6 +65,18 @@ class EmpreinteDigitale(models.Model):
     def __str__(self):
         return self.doigt
 
+
+# ================================================
+# RECONNAISSANCE FACIALE
+# ===============================================
+class ReconnaissanceFaciale(models.Model):
+    photo = models.ImageField(upload_to='reconnaissance_faciales/', null=True, blank=True)
+    encodage_facial = models.JSONField(null=True, blank=True)
+    date_enregistrement = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Reconnaissance faciale #{self.pk}"
+
 # ===========================================
 # EPOUX
 # ==========================================
@@ -79,6 +91,9 @@ class Epoux(models.Model):
     photo_carte = models.ImageField(upload_to='cartes_identite/', null=True, blank=True)
     telephone = models.CharField(max_length=20)
     empreinte_digitale = models.OneToOneField(EmpreinteDigitale, on_delete=models.SET_NULL, null=True, blank=True)
+    reconnaissance_faciale = models.OneToOneField(
+        ReconnaissanceFaciale, on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     profession = models.CharField(max_length=150, null=True, blank=True)
     nom_pere = models.CharField(max_length=100, null=True, blank=True)
@@ -131,6 +146,9 @@ class Epouse(models.Model):
     photo_carte = models.ImageField(upload_to='cartes_identite/', null=True, blank=True)
     telephone = models.CharField(max_length=20)
     empreinte_digitale = models.OneToOneField(EmpreinteDigitale, on_delete=models.SET_NULL, null=True, blank=True)
+    reconnaissance_faciale = models.OneToOneField(
+        ReconnaissanceFaciale, on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     profession = models.CharField(max_length=150, null=True, blank=True)
     nom_pere = models.CharField(max_length=100, null=True, blank=True)
@@ -292,6 +310,9 @@ class Temoin(models.Model):
     date_delivrance = models.DateField(blank=True, null=True)
     lieu_delivrance = models.CharField(max_length=150, blank=True, null=True)
     empreinte_digitale = models.OneToOneField('EmpreinteDigitale', on_delete=models.SET_NULL, null=True, blank=True)
+    reconnaissance_faciale = models.OneToOneField(
+        'ReconnaissanceFaciale', on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     def __str__(self):
         return f"{self.nom} {self.prenom} ({self.provenance})"

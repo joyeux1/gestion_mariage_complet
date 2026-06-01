@@ -29,6 +29,8 @@ urlpatterns = [
     # ce qui suit a ete ajoutee
     # ==========================
     path('accounts/', include('django.contrib.auth.urls')), 
+
+
     path('', include('mariage.urls')),
 
 ]

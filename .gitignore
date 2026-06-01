@@ -1,4 +1,8 @@
 venv/
+environnement_virtuel/
+environnement_virtuel_py312/
+environnement_virtuel_py313/
+*.whl
 __pycache__/
 *.pyc/
 *.env/

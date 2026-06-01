@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from . import views
 from .views import BourgmestreDashboardView, DossierSyntheseView, QuickSearchView
 
@@ -53,6 +54,7 @@ urlpatterns = [
     # ==========================
     path('divorces/', views.DivorceListView.as_view(), name='divorce_list'),
     path('divorce/nouveau/', views.DivorceCreateView.as_view(), name='divorce_create'),
+    path('empreinte/', RedirectView.as_view(pattern_name='empreinte_create', permanent=False)),
     path('empreinte/nouveau/', views.EmpreinteCreateView.as_view(), name='empreinte_create'),
 
 

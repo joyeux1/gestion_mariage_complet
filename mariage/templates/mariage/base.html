@@ -57,8 +57,13 @@
                             <i class="bi bi-heartbreak-fill me-2"></i> Divorce
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'empreinte' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'empreinte_create' %}">
+                            <i class="bi bi-camera-video me-2"></i> Biométrie faciale
+                        </a>
+                    </li>
 
-                    {% if user.is_superuser or user.userprofile.role == 'BOURGMESTRE' %}
+                    {% if user.is_superuser or user.role|upper == 'BOURGMESTRE' %}
                         <li class="nav-item">
                             <a class="nav-link text-warning {% if 'bourgmestre' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'bourgmestre_dashboard' %}">
                                 <i class="bi bi-cash-coin me-2"></i> Caisse de la commune pour les frais du mariage

@@ -1,8 +1,12 @@
+import base64
+import json
 from datetime import timedelta
 from decimal import Decimal
 
 from django.urls import reverse_lazy
 from django.http import JsonResponse
+from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, DetailView, CreateView, TemplateView, UpdateView
 from django.db.models import Q, Sum
@@ -14,9 +18,10 @@ from django.contrib import messages
 from django.db import transaction
 
 from .models import (
-    CaisseCommune, Commune, MouvementCaisse, EmpreinteDigitale, Epoux, Epouse, 
-    Dossier, Paiement, Document, Temoin, Mariage, Divorce
+    CaisseCommune, Commune, MouvementCaisse, EmpreinteDigitale, ReconnaissanceFaciale,
+    Epoux, Epouse, Dossier, Paiement, Document, Temoin, Mariage, Divorce,
 )
+from .services_biometrie import ReconnaissanceFacialeService
 from .forms import (
     CommuneForm, EpouxForm, EpouseForm, DossierForm, 
     PaiementForm, DocumentForm, TemoinForm, MariageForm, 
@@ -45,17 +50,17 @@ class SmartSecurityMixin(LoginRequiredMixin):
             return super().dispatch(request, *args, **kwargs)
 
         # 3. Vérification du profil pour les utilisateurs normaux
-        if not hasattr(request.user, 'userprofile'):
-            messages.error(request, "Accès refusé. Vous ne possédez pas de profil d'agent civil.")
+        if not getattr(request.user, 'role', None):
+            messages.error(request, "Accès refusé. Vous ne possédez pas de rôle d'agent civil.")
             return redirect('dashboard')
 
         # Récupération et normalisation du rôle (Gestion des majuscules)
-        user_role = request.user.userprofile.role.upper()
+        user_role = request.user.role.upper()
         allowed_roles_upper = [role.upper() for role in self.allowed_roles]
 
         # 4. Contrôle strict du rôle requis
         if allowed_roles_upper and user_role not in allowed_roles_upper:
-            messages.error(request, f"Accès interdit pour le rôle d'agent : {request.user.userprofile.role}")
+            messages.error(request, f"Accès interdit pour le rôle d'agent : {request.user.get_role_display() if hasattr(request.user, 'get_role_display') else request.user.role}")
             return redirect('dashboard')
 
         return super().dispatch(request, *args, **kwargs)
@@ -132,6 +137,63 @@ class EmpreinteCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
     template_name = 'mariage/biometrie/empreinte_form.html'
     success_url = reverse_lazy('mariage_list')
 
+    def post(self, request, *args, **kwargs):
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
+        image_base64 = request.POST.get('image_base64', '').strip()
+
+        if is_ajax and image_base64:
+            return self._traiter_reconnaissance_faciale(request, image_base64)
+
+        return super().post(request, *args, **kwargs)
+
+    def _traiter_reconnaissance_faciale(self, request, image_base64):
+        try:
+            image_base64 = self._nettoyer_chaine_base64(image_base64)
+            image_data = base64.b64decode(image_base64, validate=True)
+            content_file = ContentFile(image_data, name='capture_webcam.jpg')
+
+            encodage = ReconnaissanceFacialeService.extraire_encodage_facial(content_file)
+            encodage_facial = json.loads(
+                ReconnaissanceFacialeService.encoder_json(encodage)
+            )
+
+            reconnaissance = ReconnaissanceFaciale(encodage_facial=encodage_facial)
+            content_file.seek(0)
+            reconnaissance.photo.save('capture_webcam.jpg', content_file, save=False)
+            reconnaissance.save()
+
+            return JsonResponse({
+                'success': True,
+                'message': 'Reconnaissance faciale enregistrée avec succès !',
+                'redirect_url': self.get_success_url(),
+            })
+
+        except ValidationError as exc:
+            return JsonResponse({
+                'success': False,
+                'errors': {'image_base64': exc.messages},
+            }, status=400)
+
+        except (base64.binascii.Error, ValueError):
+            return JsonResponse({
+                'success': False,
+                'errors': {'image_base64': ['Image Base64 invalide ou corrompue.']},
+            }, status=400)
+
+        except Exception as exc:
+            return JsonResponse({
+                'success': False,
+                'errors': {'image_base64': [f'Erreur lors du traitement facial : {exc}']},
+            }, status=400)
+
+    @staticmethod
+    def _nettoyer_chaine_base64(image_base64):
+        if ';base64,' in image_base64:
+            return image_base64.split(';base64,', 1)[1]
+        if ',' in image_base64:
+            return image_base64.split(',', 1)[1]
+        return image_base64
+
 
 # ==========================================
 # 3. LES CONJOINTS
@@ -186,7 +248,7 @@ class DossierCreateView(SmartSecurityMixin, View):
         if request.user.is_superuser:
             commune_agent = Commune.objects.first()
         else:
-            commune_agent = request.user.userprofile.commune
+            commune_agent = request.user.commune
 
         context = {
             'communes': Commune.objects.all(),
@@ -197,7 +259,7 @@ class DossierCreateView(SmartSecurityMixin, View):
 
     def post(self, request, *args, **kwargs):
         # Détermination de la commune de travail
-        commune_agent = Commune.objects.first() if request.user.is_superuser else request.user.userprofile.commune
+        commune_agent = Commune.objects.first() if request.user.is_superuser else request.user.commune
 
         # ACTION 1 : VÉRIFICATION BIOMÉTRIQUE PRÉALABLE
         if 'verifier_biometrie' in request.POST:
@@ -505,7 +567,7 @@ class DossierSyntheseView(LoginRequiredMixin, View):
             return super().dispatch(request, *args, **kwargs)
 
         roles_autorises = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE']
-        if not hasattr(request.user, 'userprofile') or request.user.userprofile.role.upper() not in roles_autorises:
+        if not getattr(request.user, 'role', None) or request.user.role.upper() not in roles_autorises:
             messages.error(request, "Accès refusé. Vous n'avez pas l'autorisation requise.")
             return redirect('dashboard')
             
@@ -516,8 +578,8 @@ class DossierSyntheseView(LoginRequiredMixin, View):
             affectation_commune = Commune.objects.first()
             role_affiche = "SUPER-ADMINISTRATEUR"
         else:
-            affectation_commune = request.user.userprofile.commune
-            role_affiche = request.user.userprofile.role
+            affectation_commune = request.user.commune
+            role_affiche = request.user.role
 
         context = {
             'communes': Commune.objects.all(),
@@ -571,7 +633,7 @@ class DossierSyntheseView(LoginRequiredMixin, View):
                     profession=request.POST.get('f_prof')
                 )
 
-                commune_agent = Commune.objects.first() if request.user.is_superuser else request.user.userprofile.commune
+                commune_agent = Commune.objects.first() if request.user.is_superuser else request.user.commune
                 
                 dossier = Dossier.objects.create(
                     epoux=epoux,
@@ -619,7 +681,7 @@ class BourgmestreDashboardView(LoginRequiredMixin, TemplateView):
         if request.user.is_superuser:
             return super().dispatch(request, *args, **kwargs)
             
-        if not hasattr(request.user, 'userprofile') or request.user.userprofile.role.upper() != 'BOURGMESTRE':
+        if not getattr(request.user, 'role', None) or request.user.role.upper() != 'BOURGMESTRE':
             messages.error(request, "Accès réservé aux Bourgmestres.")
             return redirect('dashboard')
             
@@ -632,8 +694,8 @@ class BourgmestreDashboardView(LoginRequiredMixin, TemplateView):
             commune = Commune.objects.first()
             role_label = "SUPER-ADMINISTRATEUR"
         else:
-            commune = self.request.user.userprofile.commune
-            role_label = self.request.user.userprofile.role
+            commune = self.request.user.commune
+            role_label = self.request.user.role
         
         if commune:
             caisse, created = CaisseCommune.objects.get_or_create(commune=commune)
