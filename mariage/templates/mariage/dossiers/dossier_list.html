@@ -25,9 +25,11 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for dossier in object_list %}
+                    {% for dossier in dossiers %}
                     <tr>
-                        <td class="ps-4 fw-bold text-primary">{{ dossier.numero_dossier }}</td>
+                        <td class="ps-4 fw-bold">
+                            <a href="{% url 'dossier_edit' dossier.id %}" class="text-primary text-decoration-none">{{ dossier.numero_dossier }}</a>
+                        </td>
                         
                         <td>{{ dossier.date_depot|date:"d/m/Y" }}</td>
                         
@@ -51,20 +53,40 @@
                         
                         <td class="text-center">
                             <div class="d-flex justify-content-center gap-2">
-                                {% if dossier.epoux and dossier.epoux.photo %}
-                                    <img src="{{ dossier.epoux.photo.url }}" alt="Époux" class="rounded-circle border border-2 border-primary" style="width: 38px; height: 38px; object-fit: cover;" title="Époux: {{ dossier.epoux.nom }}">
+                                {% if dossier.epoux %}
+                                    {% if dossier.epoux.photo_affichage %}
+                                        <img src="{{ dossier.epoux.photo_affichage.url }}" alt="Photo époux"
+                                             class="rounded-circle border border-2 border-primary photo-conjoint-thumb"
+                                             style="width: 42px; height: 42px; object-fit: cover; cursor: pointer;"
+                                             title="Cliquer pour agrandir — Époux: {{ dossier.epoux.nom }} {{ dossier.epoux.prenom }}"
+                                             role="button" tabindex="0"
+                                             data-photo-url="{{ dossier.epoux.photo_affichage.url }}"
+                                             data-photo-label="Futur Époux — {{ dossier.epoux.nom }} {{ dossier.epoux.post_nom }} {{ dossier.epoux.prenom }}">
+                                    {% else %}
+                                        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border border-primary border-opacity-50" style="width: 42px; height: 42px;" title="Pas de photo époux">
+                                            <i class="bi bi-person text-primary"></i>
+                                        </div>
+                                    {% endif %}
                                 {% else %}
-                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border border-secondary border-opacity-25" style="width: 38px; height: 38px;" title="Pas de photo époux">
-                                        <i class="bi bi-person text-secondary"></i>
-                                    </div>
+                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border" style="width: 42px; height: 42px;"><i class="bi bi-person text-muted"></i></div>
                                 {% endif %}
 
-                                {% if dossier.epouse and dossier.epouse.photo %}
-                                    <img src="{{ dossier.epouse.photo.url }}" alt="Épouse" class="rounded-circle border border-2 border-danger" style="width: 38px; height: 38px; object-fit: cover;" title="Épouse: {{ dossier.epouse.nom }}">
+                                {% if dossier.epouse %}
+                                    {% if dossier.epouse.photo_affichage %}
+                                        <img src="{{ dossier.epouse.photo_affichage.url }}" alt="Photo épouse"
+                                             class="rounded-circle border border-2 border-danger photo-conjoint-thumb"
+                                             style="width: 42px; height: 42px; object-fit: cover; cursor: pointer;"
+                                             title="Cliquer pour agrandir — Épouse: {{ dossier.epouse.nom }} {{ dossier.epouse.prenom }}"
+                                             role="button" tabindex="0"
+                                             data-photo-url="{{ dossier.epouse.photo_affichage.url }}"
+                                             data-photo-label="Future Épouse — {{ dossier.epouse.nom }} {{ dossier.epouse.post_nom }} {{ dossier.epouse.prenom }}">
+                                    {% else %}
+                                        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border border-danger border-opacity-50" style="width: 42px; height: 42px;" title="Pas de photo épouse">
+                                            <i class="bi bi-person-heart text-danger"></i>
+                                        </div>
+                                    {% endif %}
                                 {% else %}
-                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border border-secondary border-opacity-25" style="width: 38px; height: 38px;" title="Pas de photo épouse">
-                                        <i class="bi bi-person-female text-secondary"></i>
-                                    </div>
+                                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border" style="width: 42px; height: 42px;"><i class="bi bi-person text-muted"></i></div>
                                 {% endif %}
                             </div>
                         </td>
@@ -99,4 +121,56 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalPhotoConjoint" tabindex="-1" aria-labelledby="modalPhotoConjointLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalPhotoConjointLabel">Photo du conjoint</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body text-center pt-2 pb-4 px-4">
+                <img id="modalPhotoConjointImg" src="" alt="" class="img-fluid rounded shadow-sm"
+                     style="max-height: 75vh; width: auto; max-width: 100%; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const modalEl = document.getElementById('modalPhotoConjoint');
+    if (!modalEl) return;
+
+    const modal = new bootstrap.Modal(modalEl);
+    const imgEl = document.getElementById('modalPhotoConjointImg');
+    const titleEl = document.getElementById('modalPhotoConjointLabel');
+
+    function ouvrirPhoto(thumb) {
+        const url = thumb.dataset.photoUrl;
+        const label = thumb.dataset.photoLabel || 'Photo du conjoint';
+        if (!url) return;
+        imgEl.src = url;
+        imgEl.alt = label;
+        titleEl.textContent = label;
+        modal.show();
+    }
+
+    document.querySelectorAll('.photo-conjoint-thumb').forEach(function (thumb) {
+        thumb.addEventListener('click', function () { ouvrirPhoto(thumb); });
+        thumb.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                ouvrirPhoto(thumb);
+            }
+        });
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        imgEl.removeAttribute('src');
+    });
+})();
+</script>
 {% endblock %}

@@ -4,15 +4,22 @@
 {% block title %}Liste des Mariages{% endblock %}
 
 {% block content %}
-<div class="container-fluid" id="mariage-app-container">
+<div class="container-fluid" id="mariage-app-container"
+     data-recherche-url="{% url 'mariage_recherche_dossier' %}"
+     data-recherche-faciale-url="{% url 'mariage_recherche_faciale' %}"
+     data-enregistrer-url="{% url 'mariage_enregistrer_acte' %}">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold text-dark"><i class="bi bi-heart-fill text-danger me-2"></i> Registre Centralisé des Mariages</h2>
             <p class="text-muted mb-0">Affichage des 20 derniers enregistrements (Toutes Provinces Confondues)</p>
         </div>
-        <button class="btn btn-primary btn-lg shadow-sm" onclick="openNouveauMariageWorkflow()">
-            <i class="bi bi-plus-circle me-2"></i> Nouveau Mariage
-        </button>
+        <div id="mariage-btn-nouveau-wrap">
+            <button type="button" class="btn btn-primary btn-lg shadow-sm" onclick="openNouveauMariageWorkflow()">
+                <i class="bi bi-plus-circle me-2"></i> Nouveau Mariage
+            </button>
+        </div>
     </div>
 
     <div class="card border-0 shadow-sm" id="view-list-mariages">
@@ -30,42 +37,68 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for mariage in mariages|slice:":20" %}
+                        {% for mariage in mariages %}
                         <tr>
                             <td class="ps-4 fw-bold text-primary">#{{ mariage.numero_acte }}</td>
                             <td>
-                                <div class="d-flex gap-1 position-relative">
-                                    {% if mariage.epoux.photo %}
-                                        <img src="{{ mariage.epoux.photo.url }}" class="rounded-circle border border-2 border-white" width="45" height="45" alt="Époux" title="Époux">
+                                <div class="d-flex gap-1 position-relative align-items-center">
+                                    {% if mariage.epoux.photo_affichage %}
+                                        <img src="{{ mariage.epoux.photo_affichage.url }}" alt="Photo époux"
+                                             class="rounded-circle border border-2 border-primary photo-conjoint-thumb"
+                                             width="45" height="45" style="object-fit: cover; cursor: pointer;"
+                                             title="Cliquer pour agrandir — {{ mariage.epoux.nom }}"
+                                             role="button" tabindex="0"
+                                             data-photo-url="{{ mariage.epoux.photo_affichage.url }}"
+                                             data-photo-label="Époux — {{ mariage.epoux.nom }} {{ mariage.epoux.post_nom }} {{ mariage.epoux.prenom }}">
                                     {% else %}
-                                        <div class="rounded-circle bg-secondary d-inline-block text-white text-center align-middle pt-1" style="width:45px; height:45px;">M</div>
+                                        <div class="rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center text-white" style="width:45px; height:45px;" title="Pas de photo époux">M</div>
                                     {% endif %}
-                                    
-                                    {% if mariage.epouse.photo %}
-                                        <img src="{{ mariage.epouse.photo.url }}" class="rounded-circle border border-2 border-white ms-n3" width="45" height="45" alt="Épouse" title="Épouse">
+                                    {% if mariage.epouse.photo_affichage %}
+                                        <img src="{{ mariage.epouse.photo_affichage.url }}" alt="Photo épouse"
+                                             class="rounded-circle border border-2 border-danger photo-conjoint-thumb ms-n3"
+                                             width="45" height="45" style="object-fit: cover; cursor: pointer;"
+                                             title="Cliquer pour agrandir — {{ mariage.epouse.nom }}"
+                                             role="button" tabindex="0"
+                                             data-photo-url="{{ mariage.epouse.photo_affichage.url }}"
+                                             data-photo-label="Épouse — {{ mariage.epouse.nom }} {{ mariage.epouse.post_nom }} {{ mariage.epouse.prenom }}">
                                     {% else %}
-                                        <div class="rounded-circle bg-danger d-inline-block text-white text-center align-middle pt-1 ms-n3" style="width:45px; height:45px; background-color: #e685a3;">F</div>
+                                        <div class="rounded-circle d-inline-flex align-items-center justify-content-center text-white ms-n3" style="width:45px; height:45px; background-color:#e685a3;" title="Pas de photo épouse">F</div>
                                     {% endif %}
                                 </div>
                             </td>
-                            <td><span class="badge bg-light text-dark me-1">M.</span> {{ mariage.epoux.nom }} {{ mariage.epoux.postnom }} {{ mariage.epoux.prenom }}</td>
-                            <td><span class="badge bg-light text-danger me-1">Mme</span> {{ mariage.epouse.nom }} {{ mariage.epouse.postnom }} {{ mariage.epouse.prenom }}</td>
+                            <td><span class="badge bg-light text-dark me-1">M.</span> {{ mariage.epoux.nom }} {{ mariage.epoux.post_nom }} {{ mariage.epoux.prenom }}</td>
+                            <td><span class="badge bg-light text-danger me-1">Mme</span> {{ mariage.epouse.nom }} {{ mariage.epouse.post_nom }} {{ mariage.epouse.prenom }}</td>
                             <td>
+                                {% with commune=mariage.dossier.commune_enregistrement %}
                                 <div class="small">
-                                    <div class="fw-semibold">Commune de {{ mariage.commune_nom }}</div>
-                                    <div class="text-muted">{{ mariage.ville_nom }}, Prov. {{ mariage.province_nom }}</div>
+                                    {% if commune %}
+                                        <div class="fw-semibold">Commune de {{ commune.nom }}</div>
+                                        <div class="text-muted">{{ commune.ville.nom }}, Prov. {{ commune.ville.province.nom }}</div>
+                                    {% else %}
+                                        <span class="text-muted">{{ mariage.lieu_mariage }}</span>
+                                    {% endif %}
                                 </div>
+                                {% endwith %}
                             </td>
                             <td class="text-center">
-                                <a href="{% url 'visualiser_acte_pdf' mariage.id %}" class="btn btn-sm btn-outline-danger" target="_blank">
+                                <a href="{% url 'mariage_detail' mariage.pk %}" class="btn btn-sm btn-outline-danger me-1" target="_blank">
                                     <i class="bi bi-file-pdf-fill me-1"></i> Voir Acte PDF
+                                </a>
+                                <a href="{% url 'mariage_update' mariage.pk %}" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-pencil"></i>
                                 </a>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
                             <td colspan="6" class="text-center py-5 text-muted">
-                                <i class="bi bi-inbox display-4 d-block mb-3"></i> Aucun mariage enregistré dans le système.
+                                <i class="bi bi-inbox display-4 d-block mb-3"></i>
+                                Aucun mariage enregistré dans le système.
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-primary" onclick="openNouveauMariageWorkflow()">
+                                        <i class="bi bi-plus-circle me-2"></i> Créer le premier mariage
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -79,25 +112,28 @@
         <div class="card-header bg-white py-3 border-0">
             <div class="d-flex justify-content-between align-items-center">
                 <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-search me-2"></i> Recherche & Validation du Dossier</h4>
-                <button class="btn btn-sm btn-secondary" onclick="resetToListView()"><i class="bi bi-arrow-left"></i> Retour</button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="resetToListView()"><i class="bi bi-arrow-left"></i> Retour</button>
             </div>
         </div>
         <div class="card-body">
             <ul class="nav nav-pills nav-justified mb-4" id="searchTabs" role="tablist">
                 <li class="nav-item">
-                    <button class="nav-link active" id="biometrie-tab" data-bs-toggle="pill" data-bs-target="#search-biometrie" type="button"><i class="bi bi-fingerprint me-2"></i>1. Empreintes Digitales</button>
+                    <button class="nav-link active" id="biometrie-tab" data-bs-toggle="pill" data-bs-target="#search-biometrie" type="button"><i class="bi bi-fingerprint me-2"></i>1. Empreintes</button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link" id="identite-tab" data-bs-toggle="pill" data-bs-target="#search-identite" type="button"><i class="bi bi-person-text me-2"></i>2. Recherche Nominative</button>
+                    <button class="nav-link" id="identite-tab" data-bs-toggle="pill" data-bs-target="#search-identite" type="button"><i class="bi bi-person-text me-2"></i>2. Nominative</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="faciale-tab" data-bs-toggle="pill" data-bs-target="#search-faciale" type="button"><i class="bi bi-camera-video me-2"></i>3. Reconnaissance faciale</button>
                 </li>
             </ul>
 
             <div class="tab-content border p-4 rounded bg-light">
                 <div class="tab-pane fade show active text-center py-4" id="search-biometrie">
-                    <div class="biometrie-trigger" onclick="simulerScanBiometriqueMariage()">
-                        <i class="bi bi-fingerprint text-primary display-1 animate-pulse" style="cursor:pointer;"></i>
+                    <div class="biometrie-trigger" onclick="simulerScanBiometriqueMariage()" style="cursor:pointer;">
+                        <i class="bi bi-fingerprint text-primary display-1"></i>
                         <h5 class="mt-3">Posez l'empreinte sur le lecteur</h5>
-                        <p class="text-muted small">Recherche automatique globale sur l'intégralité du réseau d'État Civil</p>
+                        <p class="text-muted small">Recherche automatique des dossiers validés (époux + épouse renseignés)</p>
                     </div>
                 </div>
                 <div class="tab-pane fade" id="search-identite">
@@ -106,21 +142,55 @@
                         <div class="col-md-4"><input type="text" id="s_postnom" class="form-control" placeholder="Postnom..."></div>
                         <div class="col-md-4"><input type="text" id="s_prenom" class="form-control" placeholder="Prénom..."></div>
                         <div class="col-12 text-end">
-                            <button class="btn btn-primary" onclick="executerRechercheDossier()"><i class="bi bi-search me-2"></i>Lancer la recherche</button>
+                            <button type="button" class="btn btn-primary" onclick="executerRechercheDossier()"><i class="bi bi-search me-2"></i>Lancer la recherche</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="search-faciale">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8 text-center">
+                            <p class="text-muted small mb-3">
+                                Placez le visage de la personne devant la webcam, capturez la photo puis lancez la recherche dans les dossiers enregistrés.
+                            </p>
+                            <div class="d-flex flex-wrap justify-content-center align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border border-primary border-opacity-25">
+                                <div class="rounded-circle overflow-hidden bg-dark border border-2 border-primary flex-shrink-0"
+                                     style="width: 160px; height: 160px;">
+                                    <video id="mariage-facial-webcam" autoplay playsinline
+                                           style="width: 100%; height: 100%; object-fit: cover;"></video>
+                                </div>
+                                <div id="mariage-facial-apercu" class="rounded-circle overflow-hidden border border-2 border-success flex-shrink-0 d-none"
+                                     style="width: 160px; height: 160px;">
+                                    <img id="mariage-facial-apercu-img" src="" alt="Capture" class="w-100 h-100" style="object-fit: cover;">
+                                </div>
+                            </div>
+                            <canvas id="mariage-facial-canvas" class="d-none"></canvas>
+                            <input type="hidden" id="mariage-facial-base64" value="">
+                            <div class="d-flex flex-wrap justify-content-center gap-2">
+                                <button type="button" class="btn btn-outline-primary" id="mariage-facial-camera-btn">
+                                    <i class="bi bi-camera-video me-2"></i>Démarrer la caméra
+                                </button>
+                                <button type="button" class="btn btn-success" id="mariage-facial-search-btn" disabled>
+                                    <i class="bi bi-person-bounding-box me-2"></i>Rechercher par visage
+                                </button>
+                            </div>
+                            <p class="text-muted small mt-3 mb-0">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Compare le visage capturé aux photos des dossiers (carte d'électeur ou biométrie).
+                            </p>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div id="resultats-dossiers-container" class="mt-4 d-none">
-                <h5 class="fw-bold mb-3">Dossiers Correspondants (Vérification Cartes d'Électeurs)</h5>
+                <h5 class="fw-bold mb-3">Dossiers correspondants</h5>
                 <div class="table-responsive">
                     <table class="table table-bordered align-middle bg-white">
                         <thead class="table-light">
                             <tr>
                                 <th>N° Dossier</th>
-                                <th class="text-center">Carte Électeur Époux</th>
-                                <th class="text-center">Carte Électeur Épouse</th>
+                                <th class="text-center">Carte / Photo Époux</th>
+                                <th class="text-center">Carte / Photo Épouse</th>
                                 <th>Futurs Époux</th>
                                 <th class="text-center">Action</th>
                             </tr>
@@ -138,41 +208,120 @@
         </div>
         <div class="card-body">
             <form id="form-acte-mariage" onsubmit="genererApercuAvantImpression(event)">
+                <input type="hidden" id="form-dossier-id" value="">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Nom Complet Époux</label>
-                        <input type="text" class="form-control" value="KASEREKA MBUSA Joyeux" readonly>
+                        <input type="text" class="form-control" id="form-epoux-nom" readonly>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-bold">Nom Complet Épouse</label>
-                        <input type="text" class="form-control" value="KAVIRA MASIKA Alliance" readonly>
+                        <input type="text" class="form-control" id="form-epouse-nom" readonly>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold">Commune</label>
-                        <input type="text" class="form-control" value="Bulengera" readonly>
+                        <input type="text" class="form-control" id="form-commune" readonly>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold">Ville</label>
-                        <input type="text" class="form-control" value="Butembo" readonly>
+                        <input type="text" class="form-control" id="form-ville" readonly>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-bold">Province</label>
-                        <input type="text" class="form-control" value="Nord-Kivu" readonly>
+                        <input type="text" class="form-control" id="form-province" readonly>
                     </div>
-                    <div class="col-md-12">
-                        <label class="form-label fw-bold text-danger">Statut du Dossier (ItemList) *</label>
-                        <select class="form-select border-danger fw-bold" id="itemlist_status" required>
-                            <option value="en_cours">En cours</option>
-                            <option value="ouvert">Ouvert</option>
-                            <option value="validee" selected>Validée</option>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">N° Acte *</label>
+                        <input type="text" class="form-control" id="form-numero-acte" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Date du mariage *</label>
+                        <input type="date" class="form-control" id="form-date-mariage" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Lieu du mariage *</label>
+                        <input type="text" class="form-control" id="form-lieu-mariage" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Régime matrimonial *</label>
+                        <select class="form-select" id="form-regime" required>
+                            <option value="Communauté de biens">Communauté de biens</option>
+                            <option value="Séparation de biens">Séparation de biens</option>
+                            <option value="Participation aux acquêts">Participation aux acquêts</option>
                         </select>
                     </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Remarque</label>
+                        <input type="text" class="form-control" id="form-remarque" placeholder="Optionnel">
+                    </div>
                 </div>
-                <div class="mt-4 pt-3 border-top text-end">
-                    <button type="submit" class="btn btn-success btn-lg"><i class="bi bi-file-earmark-pdf me-2"></i> Générer l'Acte de Mariage</button>
+                <div class="mt-4 pt-3 border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary" onclick="openNouveauMariageWorkflow()"><i class="bi bi-arrow-left me-2"></i> Changer de dossier</button>
+                    <button type="submit" id="btn-generer-acte" class="btn btn-success btn-lg"><i class="bi bi-file-earmark-pdf me-2"></i> Générer l'Acte de Mariage</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalPhotoConjoint" tabindex="-1" aria-labelledby="modalPhotoConjointLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalPhotoConjointLabel">Photo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body text-center pt-2 pb-4 px-4">
+                <img id="modalPhotoConjointImg" src="" alt="" class="img-fluid rounded shadow-sm"
+                     style="max-height: 75vh; width: auto; max-width: 100%; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'mariage/js/mariage_list.js' %}"></script>
+<script>
+    document.getElementById('form-date-mariage').valueAsDate = new Date();
+
+    (function () {
+        const modalEl = document.getElementById('modalPhotoConjoint');
+        if (!modalEl) return;
+        const modal = new bootstrap.Modal(modalEl);
+        const imgEl = document.getElementById('modalPhotoConjointImg');
+        const titleEl = document.getElementById('modalPhotoConjointLabel');
+
+        function ouvrirPhoto(thumb) {
+            const url = thumb.dataset.photoUrl;
+            const label = thumb.dataset.photoLabel || 'Photo';
+            if (!url) return;
+            imgEl.src = url;
+            imgEl.alt = label;
+            titleEl.textContent = label;
+            modal.show();
+        }
+
+        function lierMiniatures(root) {
+            (root || document).querySelectorAll('.photo-conjoint-thumb').forEach(function (thumb) {
+                if (thumb.dataset.photoBound) return;
+                thumb.dataset.photoBound = '1';
+                thumb.addEventListener('click', function () { ouvrirPhoto(thumb); });
+                thumb.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        ouvrirPhoto(thumb);
+                    }
+                });
+            });
+        }
+
+        lierMiniatures(document);
+        window.lierPhotosConjoints = lierMiniatures;
+
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            imgEl.removeAttribute('src');
+        });
+    })();
+</script>
 {% endblock %}

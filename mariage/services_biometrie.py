@@ -145,6 +145,46 @@ class ReconnaissanceFacialeService:
     def decoder_json(encodage_json):
         """Décode un encodage JSON en numpy array"""
         np = _import_numpy()
+        if encodage_json is None:
+            return None
         if isinstance(encodage_json, str):
             return np.array(json.loads(encodage_json))
+        if isinstance(encodage_json, list):
+            return np.array(encodage_json)
         return None
+
+    @staticmethod
+    def distance_visages(encodage1, encodage2):
+        """Distance euclidienne entre deux encodages (plus bas = plus similaire)."""
+        np = _import_numpy()
+        return float(np.linalg.norm(encodage1 - encodage2))
+
+    @staticmethod
+    def meilleure_correspondance(nouveau_encodage, candidats):
+        """
+        candidats: liste de dicts {'id', 'encodage', 'meta'}
+        Retourne le candidat le plus proche ou None.
+        """
+        np = _import_numpy()
+        meilleure = None
+        meilleure_distance = float('inf')
+
+        for candidat in candidats:
+            enc = candidat.get('encodage')
+            if enc is None:
+                continue
+            try:
+                distance = float(np.linalg.norm(nouveau_encodage - enc))
+            except Exception:
+                continue
+            if distance < meilleure_distance:
+                meilleure_distance = distance
+                meilleure = {**candidat, 'distance': distance}
+
+        if meilleure and meilleure_distance < ReconnaissanceFacialeService.DISTANCE_TOLERANCE:
+            meilleure['correspondance'] = True
+            return meilleure
+
+        if meilleure:
+            meilleure['correspondance'] = False
+        return meilleure

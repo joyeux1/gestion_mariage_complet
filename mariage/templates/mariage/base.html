@@ -57,11 +57,6 @@
                             <i class="bi bi-heartbreak-fill me-2"></i> Divorce
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'empreinte' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'empreinte_create' %}">
-                            <i class="bi bi-camera-video me-2"></i> Biométrie faciale
-                        </a>
-                    </li>
 
                     {% if user.is_superuser or user.role|upper == 'BOURGMESTRE' %}
                         <li class="nav-item">

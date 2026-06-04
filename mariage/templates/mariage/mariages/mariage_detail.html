@@ -19,7 +19,7 @@
         <div class="text-center mb-5">
             <h5 class="fw-bold mb-0">RÉPUBLIQUE DÉMOCRATIQUE DU CONGO</h5>
             <div class="small text-uppercase">Province du Nord-Kivu</div>
-            <div class="small fw-bold">VILLE DE BUTEMBO | COMMUNE DE {{ object.dossier.commune.nom|upper }}</div>
+            <div class="small fw-bold">VILLE DE {% if object.dossier.commune_enregistrement %}{{ object.dossier.commune_enregistrement.ville.nom|upper }}{% else %}—{% endif %} | COMMUNE DE {% if object.dossier.commune_enregistrement %}{{ object.dossier.commune_enregistrement.nom|upper }}{% else %}—{% endif %}</div>
             <div style="border-top: 3px double #000; width: 200px; margin: 10px auto;"></div>
             <h3 class="fw-bold mt-4" style="font-family: 'Times New Roman', serif;">EXTRAIT D'ACTE DE MARIAGE</h3>
             <div class="fw-bold">N° {{ object.numero_acte }}</div>
@@ -30,7 +30,7 @@
                 L'an deux mille <strong>{{ object.date_mariage|date:"Y" }}</strong>, 
                 le <strong>{{ object.date_mariage|date:"d" }}</strong> du mois de <strong>{{ object.date_mariage|date:"F" }}</strong>, 
                 devant Nous, <strong>{{ user.get_full_name|upper }}</strong>, {{ user.get_role_display }}, 
-                Officier de l'État Civil de la Commune de {{ object.dossier.commune.nom }}, ont comparu publiquement :
+                Officier de l'État Civil de la Commune de {% if object.dossier.commune_enregistrement %}{{ object.dossier.commune_enregistrement.nom }}{% else %}{{ object.lieu_mariage }}{% endif %}, ont comparu publiquement :
             </p>
 
             <div class="ms-4 my-4">
@@ -40,7 +40,7 @@
 
             <p>
                 Lesquels ont déclaré vouloir se prendre pour époux sous le régime de : 
-                <strong>{{ object.get_regime_matrimonial_display|upper }}</strong>.
+                <strong>{{ object.regime_matrimonial|upper }}</strong>.
                 Nous avons prononcé, au nom de la Loi, qu'ils sont unis par le mariage.
             </p>
 

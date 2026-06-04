@@ -1,33 +1,41 @@
 {% extends 'mariage/base.html' %}
+{% load static %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <h2 class="fw-bold mb-4">Tableau de Bord : Commune de {{ commune.nom }}</h2>
+<div class="container-fluid py-4" id="dashboard-bourgmestre"
+     data-stats-url="{% url 'bourgmestre_stats_api' %}">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">Tableau de Bord : Commune de <span id="bm-commune-nom">{{ commune.nom|default:"—" }}</span></h2>
+        <small class="text-muted" id="bm-refresh-label"><i class="bi bi-arrow-repeat"></i> Actualisation auto.</small>
+    </div>
 
     <div class="row g-3 mb-4">
         <div class="col-md-4">
-            <div class="card border-0 shadow-sm bg-primary text-white">
+            <div class="card border-0 shadow-sm bg-primary text-white position-relative">
                 <div class="card-body p-4">
                     <h6 class="text-uppercase small">Recettes Totales (Caisse)</h6>
-                    <h2 class="fw-bold mb-0">{{ solde }} $</h2>
+                    <h2 class="fw-bold mb-0"><span id="bm-solde">{{ solde|floatformat:2 }}</span> $</h2>
+                    <small class="opacity-75">7 jours : <span id="bm-recettes-semaine">{{ recettes_semaine|floatformat:2 }}</span> $</small>
                     <i class="bi bi-cash-stack position-absolute end-0 bottom-0 m-3 fs-1 opacity-25"></i>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card border-0 shadow-sm bg-success text-white">
+            <div class="card border-0 shadow-sm bg-success text-white position-relative">
                 <div class="card-body p-4">
                     <h6 class="text-uppercase small">Dossiers Enregistrés</h6>
-                    <h2 class="fw-bold mb-0">{{ nb_dossiers }}</h2>
+                    <h2 class="fw-bold mb-0" id="bm-nb-dossiers">{{ nb_dossiers }}</h2>
+                    <small class="opacity-75">Commune de {{ commune.nom|default:"—" }}</small>
                     <i class="bi bi-folder-check position-absolute end-0 bottom-0 m-3 fs-1 opacity-25"></i>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card border-0 shadow-sm bg-dark text-white">
+            <div class="card border-0 shadow-sm bg-dark text-white position-relative">
                 <div class="card-body p-4">
-                    <h6 class="text-uppercase small">Statut Système</h6>
-                    <h2 class="fw-bold mb-0 text-warning">Sécurisé</h2>
+                    <h6 class="text-uppercase small">Activité communale</h6>
+                    <h2 class="fw-bold mb-0 text-warning"><span id="bm-nb-mariages">{{ nb_mariages_commune }}</span> / <span id="bm-nb-divorces">{{ nb_divorces_commune }}</span></h2>
+                    <small class="opacity-75">Mariages / Divorces — MAJ <span id="bm-derniere-maj">{% if derniere_mise_a_jour %}{{ derniere_mise_a_jour|date:"d/m/Y H:i" }}{% else %}—{% endif %}</span></small>
                     <i class="bi bi-shield-lock position-absolute end-0 bottom-0 m-3 fs-1 opacity-25"></i>
                 </div>
             </div>
@@ -48,34 +56,15 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    const ctx = document.getElementById('recettesChart').getContext('2d');
-    const labels = [{% for entry in stats_graph %}"{{ entry.date }}",{% endfor %}];
-    const data = [{% for entry in stats_graph %}{{ entry.total }},{% endfor %}];
+{{ stats_graph|json_script:"bm-chart-data" }}
+{% endblock %}
 
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Recettes journalières ($)',
-                data: data,
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                fill: true,
-                tension: 0.3,
-                borderWidth: 3,
-                pointBackgroundColor: '#0d6efd'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: { beginAtZero: true }
-            }
-        }
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'mariage/js/dashboard.js' %}"></script>
+<script>
+    initDashboardBourgmestre({
+        graph: JSON.parse(document.getElementById('bm-chart-data').textContent),
     });
 </script>
 {% endblock %}

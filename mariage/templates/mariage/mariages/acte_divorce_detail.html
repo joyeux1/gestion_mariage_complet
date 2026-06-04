@@ -1,6 +1,6 @@
 {% extends 'mariage/base.html' %}
 
-{% block title %}Acte de Divorce n° {{ divorce.id }}{% endblock %}
+{% block title %}Acte de Divorce n° {{ divorce.numero_divorce }}{% endblock %}
 
 {% block content %}
 <div class="d-print-none mb-4 d-flex justify-content-between">
@@ -13,33 +13,43 @@
         <div class="text-center mb-5">
             <h5 class="fw-bold mb-0">RÉPUBLIQUE DÉMOCRATIQUE DU CONGO</h5>
             <div class="small">PROVINCE DU NORD-KIVU</div>
-            <div class="small fw-bold">VILLE DE BUTEMBO | COMMUNE DE {{ divorce.mariage.dossier.commune.nom|upper }}</div>
+            {% if divorce.mariage.dossier.commune_enregistrement %}
+            <div class="small fw-bold">
+                VILLE DE {{ divorce.mariage.dossier.commune_enregistrement.ville.nom|upper }}
+                | COMMUNE DE {{ divorce.mariage.dossier.commune_enregistrement.nom|upper }}
+            </div>
+            {% endif %}
             <div style="border-top: 2px solid #000; width: 150px; margin: 10px auto;"></div>
             <h3 class="fw-bold mt-4" style="font-family: 'Times New Roman', serif;">ACTE DE DIVORCE</h3>
-            <div class="fw-bold">N° {{ divorce.id }}/DIV/{% now "Y" %}</div>
+            <div class="fw-bold">N° {{ divorce.numero_divorce }}</div>
         </div>
 
         <div style="font-family: 'Times New Roman', serif; font-size: 1.2rem; line-height: 1.8; text-align: justify;">
             <p>
-                Nous, <strong>{{ user.get_full_name|upper }}</strong>, {{ user.get_role_display }} de l'État Civil de la Commune de {{ divorce.mariage.dossier.commune.nom }},
-                certifions qu'en exécution du jugement de divorce n° <strong>{{ divorce.numero_jugement }}</strong>, 
-                rendu en date du <strong>{{ divorce.date_jugement|date:"d F Y" }}</strong> 
-                par le Tribunal de Grande Instance de <strong>{{ divorce.tribunal }}</strong> :
+                Nous, <strong>{{ user.get_full_name|upper|default:user.username|upper }}</strong>,
+                {{ user.get_role_display|default:"Officier de l'État Civil" }},
+                certifions qu'en date du <strong>{{ divorce.date_divorce|date:"d F Y" }}</strong>,
+                la dissolution du mariage suivant a été enregistrée :
             </p>
 
             <p class="mt-4">
-                Le mariage célébré en date du <strong>{{ divorce.mariage.date_mariage|date:"d/m/Y" }}</strong> 
+                Le mariage célébré en date du <strong>{{ divorce.mariage.date_mariage|date:"d/m/Y" }}</strong>
                 sous l'acte n° <strong>{{ divorce.mariage.numero_acte }}</strong> entre :
             </p>
 
             <div class="ms-4 my-3 border-start ps-3 border-dark">
-                <p class="mb-1"><strong>L'ÉPOUX :</strong> {{ divorce.mariage.epoux.nom }} {{ divorce.mariage.epoux.prenom }}</p>
-                <p class="mb-0"><strong>L'ÉPOUSE :</strong> {{ divorce.mariage.epouse.nom }} {{ divorce.mariage.epouse.prenom }}</p>
+                <p class="mb-1"><strong>L'ÉPOUX :</strong> {{ divorce.mariage.epoux.nom }} {{ divorce.mariage.epoux.post_nom }} {{ divorce.mariage.epoux.prenom }}</p>
+                <p class="mb-0"><strong>L'ÉPOUSE :</strong> {{ divorce.mariage.epouse.nom }} {{ divorce.mariage.epouse.post_nom }} {{ divorce.mariage.epouse.prenom }}</p>
             </div>
 
             <p>
-                A été officiellement <strong>DISSOUS</strong>. En conséquence, les parties sont désormais déliées de tout lien matrimonial et l'acte de mariage susmentionné est déclaré <strong>NUL ET SANS EFFET</strong> à compter de ce jour.
+                A été officiellement <strong>DISSOUS</strong>. L'acte de mariage susmentionné est déclaré
+                <strong>NUL ET SANS EFFET</strong> à compter du {{ divorce.date_divorce|date:"d/m/Y" }}.
             </p>
+
+            {% if divorce.motif %}
+            <p class="small text-muted"><strong>Motif / observations :</strong> {{ divorce.motif }}</p>
+            {% endif %}
         </div>
 
         <div class="mt-5 pt-4">
@@ -49,11 +59,11 @@
                         <small class="text-muted" style="font-size: 0.6rem;">SCEAU DE LA<br>COMMUNE</small>
                     </div>
                 </div>
-                <div class="col-4">
+                <div class="col-6">
                     <div class="small fw-bold mb-4">L'Autorité Compétente</div>
-                    <div style="height: 60px;"></div> 
+                    <div style="height: 60px;"></div>
                     <div class="small fw-bold text-uppercase">{{ user.get_full_name|default:user.username }}</div>
-                    <div class="small text-muted">{{ user.get_role_display }}</div> 
+                    <div class="small text-muted">{{ user.get_role_display }}</div>
                 </div>
             </div>
         </div>

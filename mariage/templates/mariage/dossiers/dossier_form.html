@@ -1,4 +1,5 @@
 {% extends 'mariage/base.html' %}
+{% load static %}
 
 {% block title %} Cœur de Saisie - {% if is_edit %}Modification{% else %}Ouverture{% endif %} de Dossier {% endblock %}
 
@@ -12,42 +13,269 @@
                 <p class="text-muted m-0 small">Guichet unique d'enregistrement de l'État Civil</p>
             </div>
             <div class="text-end">
+                {% if commune_agent %}
                 <span class="badge bg-primary px-3 py-2 fs-6">Commune : {{ commune_agent.nom }}</span>
-                <p class="m-0 text-muted small mt-1">Saisie affectée automatiquement</p>
+                {% endif %}
+                <p class="m-0 text-muted small mt-1">{% if is_edit %}Modification du dossier{% else %}Saisie affectée automatiquement{% endif %}</p>
             </div>
         </div>
     </div>
 
-    {% if etape_biometrie and not is_edit %}
-    <div class="card shadow border-0 col-md-8 mx-auto">
-        <div class="card-header bg-dark text-white fw-bold">
-            <i class="bi bi-fingerprint me-2 text-warning"></i> Vérification anti-polygamie
+    {% if is_edit %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white fw-bold py-3">
+            <i class="bi bi-images text-primary me-2"></i> Photos des conjoints (aperçu)
         </div>
-        <div class="card-body text-center py-4">
-            <p class="text-muted fw-medium">
-                Vérification permettant de s'assurer que les deux prétendants ne sont pas engagés dans un autre mariage non dissous.
+        <div class="card-body">
+            <div class="row g-4 align-items-center">
+                <div class="col-md-5 text-center border-end">
+                    <p class="fw-bold text-primary mb-2">Futur Époux</p>
+                    {% if epoux %}
+                        {% if epoux.photo_carte %}
+                            <img src="{{ epoux.photo_carte.url }}" alt="Carte époux" class="img-fluid rounded border shadow-sm mb-2" style="max-height: 180px; object-fit: contain;">
+                            <p class="small text-muted mb-0">Carte d'électeur</p>
+                        {% endif %}
+                        {% if epoux.photo %}
+                            <img src="{{ epoux.photo.url }}" alt="Photo époux" class="rounded-circle border border-3 border-primary shadow mt-2" width="100" height="100" style="object-fit: cover;">
+                            <p class="small text-muted mb-0">Photo profil</p>
+                        {% elif epoux.photo_affichage and not epoux.photo_carte %}
+                            <img src="{{ epoux.photo_affichage.url }}" alt="Photo époux" class="rounded-circle border border-3 border-primary shadow mt-2" width="100" height="100" style="object-fit: cover;">
+                        {% endif %}
+                        {% if not epoux.photo_affichage %}
+                            <div class="py-4 text-muted"><i class="bi bi-person display-4"></i><p>Aucune photo enregistrée</p></div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted">Époux non renseigné</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-5 text-center border-end">
+                    <p class="fw-bold text-danger mb-2">Future Épouse</p>
+                    {% if epouse %}
+                        {% if epouse.photo_carte %}
+                            <img src="{{ epouse.photo_carte.url }}" alt="Carte épouse" class="img-fluid rounded border shadow-sm mb-2" style="max-height: 180px; object-fit: contain;">
+                            <p class="small text-muted mb-0">Carte d'électeur</p>
+                        {% endif %}
+                        {% if epouse.photo %}
+                            <img src="{{ epouse.photo.url }}" alt="Photo épouse" class="rounded-circle border border-3 border-danger shadow mt-2" width="100" height="100" style="object-fit: cover;">
+                            <p class="small text-muted mb-0">Photo profil</p>
+                        {% elif epouse.photo_affichage and not epouse.photo_carte %}
+                            <img src="{{ epouse.photo_affichage.url }}" alt="Photo épouse" class="rounded-circle border border-3 border-danger shadow mt-2" width="100" height="100" style="object-fit: cover;">
+                        {% endif %}
+                        {% if not epouse.photo_affichage %}
+                            <div class="py-4 text-muted"><i class="bi bi-person-heart display-4"></i><p>Aucune photo enregistrée</p></div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted">Épouse non renseignée</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold small">Statut du dossier</label>
+                    <select name="statut" class="form-select form-select-sm" form="form-dossier-edit">
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if dossier.statut == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                        {% if dossier.statut == 'ouvert' %}
+                        <option value="ouvert" selected>Ouvert</option>
+                        {% endif %}
+                    </select>
+                    <label class="form-label fw-bold small mt-2">Date dépôt</label>
+                    <input type="date" name="date_depot" class="form-control form-control-sm" form="form-dossier-edit"
+                           value="{{ dossier.date_depot|date:'Y-m-d' }}">
+                    <label class="form-label fw-bold small mt-2">Objet</label>
+                    <input type="text" name="objet" class="form-control form-control-sm" form="form-dossier-edit"
+                           value="{{ dossier.objet|default:'mariage civil' }}">
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if etape_biometrie and not is_edit %}
+    <div class="card shadow border-0 col-lg-10 mx-auto mb-4" id="dossier-verif-container"
+         data-verif-url="{% url 'dossier_verifier_conjoint' %}">
+        {{ verif_etat|json_script:"dossier-verif-etat" }}
+        <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-shield-exclamation me-2 text-warning"></i> Vérification anti-polygamie (obligatoire)</span>
+            <span class="badge bg-warning text-dark" id="verif-progress-badge">Étape 1/2 — Futur époux</span>
+        </div>
+        <div class="card-body">
+            <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+            <p class="text-muted small mb-3">
+                <strong>Procédure stricte :</strong> choisissez un mode de vérification, validez d'abord le <strong>futur époux</strong>,
+                puis la <strong>future épouse</strong>. Tant que les deux contrôles ne sont pas réussis, la saisie du dossier reste bloquée.
             </p>
-            <form method="post" enctype="multipart/form-data">
-                {% csrf_token %}
-                <div class="row my-4">
-                    <div class="col-md-6 border-end">
-                        <label class="fw-bold mb-2">Empreinte du Futur Époux</label>
-                        <input type="file" name="scan_empreinte_epoux" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="fw-bold mb-2">Empreinte de la Future Épouse</label>
-                        <input type="file" name="scan_empreinte_epouse" class="form-control form-control-sm" required>
+
+            <ul class="nav nav-pills nav-justified mb-3" id="dossierVerifTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#verif-empreinte" type="button">
+                        <i class="bi bi-fingerprint me-1"></i> 1. Empreintes
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#verif-nominative" type="button">
+                        <i class="bi bi-person-text me-1"></i> 2. Nominative
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#verif-faciale" type="button">
+                        <i class="bi bi-camera-video me-1"></i> 3. Reconnaissance faciale
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content border rounded bg-light p-4">
+                <!-- EMPREINTE -->
+                <div class="tab-pane fade show active" id="verif-empreinte">
+                    <div class="row g-4">
+                        <div class="col-md-6" id="verif-empreinte-epoux-block">
+                            <div class="card h-100 border-primary border-opacity-50">
+                                <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                    <i class="bi bi-1-circle me-1"></i> Futur époux
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label small fw-bold">Scan d'empreinte digitale</label>
+                                    <input type="file" class="form-control form-control-sm" id="empreinte-epoux-file" accept="image/*,.bmp,.png,.jpg,.jpeg">
+                                    <button type="button" class="btn btn-primary btn-sm mt-3 w-100 btn-verif-conjoint"
+                                            data-type="empreinte" data-role="epoux">
+                                        <i class="bi bi-shield-check me-1"></i> Vérifier l'époux
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6" id="verif-empreinte-epouse-block">
+                            <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-empreinte-epouse-card">
+                                <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                    <i class="bi bi-2-circle me-1"></i> Future épouse
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label small fw-bold">Scan d'empreinte digitale</label>
+                                    <input type="file" class="form-control form-control-sm" id="empreinte-epouse-file" accept="image/*,.bmp,.png,.jpg,.jpeg" disabled>
+                                    <button type="button" class="btn btn-danger btn-sm mt-3 w-100 btn-verif-conjoint" disabled
+                                            data-type="empreinte" data-role="epouse">
+                                        <i class="bi bi-shield-check me-1"></i> Vérifier l'épouse
+                                    </button>
+                                    <p class="small text-muted mt-2 mb-0">Disponible après validation de l'époux.</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <button type="submit" name="verifier_biometrie" class="btn btn-primary px-4 fw-bold">
-                    <i class="bi bi-shield-shaded me-2"></i> Interroger le Système
-                </button>
-            </form>
+
+                <!-- NOMINATIVE -->
+                <div class="tab-pane fade" id="verif-nominative">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-primary border-opacity-50" id="verif-nom-epoux-card">
+                                <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                    <i class="bi bi-1-circle me-1"></i> Futur époux
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body">
+                                    <input type="text" class="form-control form-control-sm mb-2" id="nom-epoux" placeholder="Nom *">
+                                    <input type="text" class="form-control form-control-sm mb-2" id="postnom-epoux" placeholder="Postnom">
+                                    <input type="text" class="form-control form-control-sm mb-2" id="prenom-epoux" placeholder="Prénom">
+                                    <button type="button" class="btn btn-primary btn-sm w-100 btn-verif-conjoint"
+                                            data-type="nominative" data-role="epoux">
+                                        <i class="bi bi-search me-1"></i> Vérifier l'époux
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-nom-epouse-card">
+                                <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                    <i class="bi bi-2-circle me-1"></i> Future épouse
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body">
+                                    <input type="text" class="form-control form-control-sm mb-2" id="nom-epouse" placeholder="Nom *" disabled>
+                                    <input type="text" class="form-control form-control-sm mb-2" id="postnom-epouse" placeholder="Postnom" disabled>
+                                    <input type="text" class="form-control form-control-sm mb-2" id="prenom-epouse" placeholder="Prénom" disabled>
+                                    <button type="button" class="btn btn-danger btn-sm w-100 btn-verif-conjoint" disabled
+                                            data-type="nominative" data-role="epouse">
+                                        <i class="bi bi-search me-1"></i> Vérifier l'épouse
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FACIALE -->
+                <div class="tab-pane fade" id="verif-faciale">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-primary border-opacity-50" id="verif-face-epoux-card">
+                                <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                    <i class="bi bi-1-circle me-1"></i> Futur époux
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body text-center">
+                                    <div class="rounded-circle overflow-hidden bg-dark mx-auto mb-2 border border-primary" style="width:120px;height:120px;">
+                                        <video id="dossier-webcam-epoux" autoplay playsinline class="w-100 h-100" style="object-fit:cover;"></video>
+                                    </div>
+                                    <canvas id="dossier-canvas-epoux" class="d-none"></canvas>
+                                    <input type="hidden" id="dossier-base64-epoux" value="">
+                                    <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="dossier-capture-epoux-btn">
+                                        <i class="bi bi-camera me-1"></i> Capturer
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-sm w-100 btn-verif-conjoint"
+                                            data-type="faciale" data-role="epoux" id="dossier-verif-face-epoux-btn">
+                                        <i class="bi bi-person-bounding-box me-1"></i> Vérifier l'époux
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-face-epouse-card">
+                                <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                    <i class="bi bi-2-circle me-1"></i> Future épouse
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body text-center">
+                                    <div class="rounded-circle overflow-hidden bg-dark mx-auto mb-2 border border-danger" style="width:120px;height:120px;">
+                                        <video id="dossier-webcam-epouse" autoplay playsinline class="w-100 h-100" style="object-fit:cover;"></video>
+                                    </div>
+                                    <canvas id="dossier-canvas-epouse" class="d-none"></canvas>
+                                    <input type="hidden" id="dossier-base64-epouse" value="">
+                                    <button type="button" class="btn btn-outline-danger btn-sm mb-2" id="dossier-capture-epouse-btn" disabled>
+                                        <i class="bi bi-camera me-1"></i> Capturer
+                                    </button>
+                                    <button type="button" class="btn btn-danger btn-sm w-100 btn-verif-conjoint" disabled
+                                            data-type="faciale" data-role="epouse" id="dossier-verif-face-epouse-btn">
+                                        <i class="bi bi-person-bounding-box me-1"></i> Vérifier l'épouse
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="verif-alert-zone" class="mt-3"></div>
+            <div id="verif-match-zone" class="mt-3"></div>
         </div>
     </div>
 
-    {% else %}
-    <form method="post" enctype="multipart/form-data">
+    {% elif not is_edit %}
+    <div class="alert alert-success border-0 shadow-sm d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <i class="bi bi-shield-check me-2"></i>
+            <strong>Vérification anti-polygamie validée</strong> — époux et épouse contrôlés (mode : {{ verif_etat.type|default:"—" }}).
+        </div>
+        <form method="post" class="m-0">
+            {% csrf_token %}
+            <button type="submit" name="reinitialiser_verification" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-counterclockwise me-1"></i> Refaire la vérification
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if not etape_biometrie or is_edit %}
+    <form id="form-dossier-edit" method="post" enctype="multipart/form-data">
         {% csrf_token %}
         
         {% if is_edit %}
@@ -94,15 +322,18 @@
                                 <input type="text" name="e_num_piece" value="{{ epoux.numero_piece|default:'' }}" class="form-control form-control-sm" required>
                             </div>
                             <div class="col-6">
-                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Photo de la Carte *</label>
-                                <input type="file" name="e_photo_carte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Photo de la Carte {% if not is_edit %}*{% endif %}</label>
+                                <input type="file" name="e_photo_carte" class="form-control form-control-sm" accept="image/*" {% if not is_edit %}required{% endif %}>
+                                {% if is_edit and epoux.photo_carte %}<small class="text-success">Photo actuelle conservée si vide</small>{% endif %}
                             </div>
                         </div>
 
+                        {% if not is_edit %}
                         <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2">
                             <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-primary"></i> Enregistrement Empreinte Époux *</label>
-                            <input type="file" name="e_scan_empreinte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                            <input type="file" name="e_scan_empreinte" class="form-control form-control-sm">
                         </div>
+                        {% endif %}
 
                         <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-primary" style="font-size: 0.8rem;" type="button" data-bs-toggle="modal" data-bs-target="#modalEpoux">
                             <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
@@ -145,15 +376,18 @@
                                 <input type="text" name="f_num_piece" value="{{ epouse.numero_piece|default:'' }}" class="form-control form-control-sm" required>
                             </div>
                             <div class="col-6">
-                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Photo de la Carte *</label>
-                                <input type="file" name="f_photo_carte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                                <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Photo de la Carte {% if not is_edit %}*{% endif %}</label>
+                                <input type="file" name="f_photo_carte" class="form-control form-control-sm" accept="image/*" {% if not is_edit %}required{% endif %}>
+                                {% if is_edit and epouse.photo_carte %}<small class="text-success">Photo actuelle conservée si vide</small>{% endif %}
                             </div>
                         </div>
 
+                        {% if not is_edit %}
                         <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2">
                             <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-danger"></i> Enregistrement Empreinte Épouse *</label>
-                            <input type="file" name="f_scan_empreinte" class="form-control form-control-sm" {% if not is_edit %}required{% endif %}>
+                            <input type="file" name="f_scan_empreinte" class="form-control form-control-sm">
                         </div>
+                        {% endif %}
 
                         <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-danger" style="font-size: 0.8rem;" type="button" data-bs-toggle="modal" data-bs-target="#modalEpouse">
                             <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
@@ -283,7 +517,7 @@
                         <div class="row g-2">
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Type de Pièce *</label>
-                                <input type="text" name="e_piece_identite" class="form-control form-control-sm" value="{{ epoux.type_piece|default:"Carte d'Électeur" }}">
+                                <input type="text" name="e_piece_identite" class="form-control form-control-sm" value="{% if epoux.piece_identite %}{{ epoux.piece_identite }}{% else %}Carte d'Électeur{% endif %}">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Profession *</label>
@@ -342,11 +576,11 @@
 
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Lieu Délivrance Pièce</label>
-                                <input type="text" name="e_lieu_delivrance" value="{{ epoux.lieu_delivrance_piece|default:'' }}" class="form-control form-control-sm">
+                                <input type="text" name="e_lieu_delivrance" value="{{ epoux.lieu_delivrance|default:'' }}" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Date Délivrance Pièce</label>
-                                <input type="date" name="e_date_delivrance" value="{{ epoux.date_delivrance_piece|date:'Y-m-d' }}" class="form-control form-control-sm">
+                                <input type="date" name="e_date_delivrance" value="{% if epoux.date_delivrance %}{{ epoux.date_delivrance|date:'Y-m-d' }}{% endif %}" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Photo d'Identité (Profil)</label>
@@ -372,7 +606,7 @@
                         <div class="row g-2">
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Type de Pièce *</label>
-                                <input type="text" name="f_piece_identite" class="form-control form-control-sm" value="{{ epouse.type_piece|default:"Carte d'Électeur" }}">
+                                <input type="text" name="f_piece_identite" class="form-control form-control-sm" value="{% if epouse.piece_identite %}{{ epouse.piece_identite }}{% else %}Carte d'Électeur{% endif %}">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Profession *</label>
@@ -431,11 +665,11 @@
 
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Lieu Délivrance Pièce</label>
-                                <input type="text" name="f_lieu_delivrance" value="{{ epouse.lieu_delivrance_piece|default:'' }}" class="form-control form-control-sm">
+                                <input type="text" name="f_lieu_delivrance" value="{{ epouse.lieu_delivrance|default:'' }}" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Date Délivrance Pièce</label>
-                                <input type="date" name="f_date_delivrance" value="{{ epouse.date_delivrance_piece|date:'Y-m-d' }}" class="form-control form-control-sm">
+                                <input type="date" name="f_date_delivrance" value="{% if epouse.date_delivrance %}{{ epouse.date_delivrance|date:'Y-m-d' }}{% endif %}" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Photo d'Identité (Profil)</label>
@@ -454,4 +688,10 @@
     {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if etape_biometrie and not is_edit %}
+<script src="{% static 'mariage/js/dossier_verification.js' %}"></script>
+{% endif %}
 {% endblock %}

@@ -1,7 +1,30 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
+from django.core.files.storage import default_storage
 from django.conf import settings # 1. Importez les settings
+
+
+def _champ_image_utilisable(champ_image):
+    """Vrai si le fichier image existe réellement sur le disque."""
+    return bool(
+        champ_image
+        and getattr(champ_image, 'name', None)
+        and default_storage.exists(champ_image.name)
+    )
+
+
+def photo_conjoint_affichage(conjoint):
+    """Retourne le premier champ image utilisable pour un époux ou une épouse."""
+    if not conjoint:
+        return None
+    for champ in (conjoint.photo_carte, conjoint.photo):
+        if _champ_image_utilisable(champ):
+            return champ
+    rf = getattr(conjoint, 'reconnaissance_faciale', None)
+    if rf and _champ_image_utilisable(rf.photo):
+        return rf.photo
+    return None
 
 
 class Province(models.Model):
@@ -109,6 +132,10 @@ class Epoux(models.Model):
     lieu_delivrance = models.CharField(max_length=150, null=True, blank=True)
     photo = models.ImageField(upload_to='photos/epoux/', blank=True, null=True)
 
+    @property
+    def photo_affichage(self):
+        return photo_conjoint_affichage(self)
+
     def verifier_si_deja_mariee(self):
         # 1. Si aucune empreinte n'est fournie, on ne peut pas faire cette vérification
         if not self.empreinte_digitale:
@@ -162,7 +189,11 @@ class Epouse(models.Model):
     ville_origine = models.CharField(max_length=150, null=True, blank=True)
     date_delivrance = models.DateField(null=True, blank=True) # CORRIGÉ : DateField avec majuscule
     lieu_delivrance = models.CharField(max_length=150, null=True, blank=True)
-    photo = models.ImageField(upload_to='photos/epoux/', blank=True, null=True)
+    photo = models.ImageField(upload_to='photos/epouse/', blank=True, null=True)
+
+    @property
+    def photo_affichage(self):
+        return photo_conjoint_affichage(self)
 
     def verifier_si_deja_mariee(self):
         # 1. Si aucune empreinte n'est fournie, on ne peut pas faire cette vérification
@@ -170,15 +201,14 @@ class Epouse(models.Model):
             return False
             
         # 2. On cherche si un mariage actif existe déjà pour cette empreinte exacte
-        # On passe par la relation : mariage -> epoux -> empreinte_digitale
         query = Mariage.objects.filter(
-            epoux__empreinte_digitale=self.empreinte_digitale, 
+            epouse__empreinte_digitale=self.empreinte_digitale,
             statut='actif'
         )
         
-        # 3. Si l'époux existe déjà (mode modification), on exclut son propre mariage actuel
+        # 3. Si l'épouse existe déjà (mode modification), on exclut son propre mariage actuel
         if self.pk:
-            query = query.exclude(epoux=self)
+            query = query.exclude(epouse=self)
             
         return query.exists()
 

@@ -4,10 +4,14 @@
 {% block title %}Tableau de Bord | État Civil{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid" id="dashboard-main"
+     data-stats-url="{% url 'dashboard_stats_api' %}">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold"><i class="bi bi-speedometer2 me-2"></i> Tableau de Bord</h2>
-        <span class="text-muted">{{ now|date:"d F Y" }}</span>
+        <div class="text-end">
+            <span class="text-muted" id="dash-date-label">{{ now|date:"d F Y" }}</span>
+            <br><small class="text-muted" id="dash-refresh-label"><i class="bi bi-arrow-repeat"></i> Actualisation auto.</small>
+        </div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -15,8 +19,11 @@
             <div class="card border-0 border-start border-primary border-4 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted small text-uppercase fw-bold">Total Mariages</h6>
-                    <h3 class="fw-bold mb-0">{{ total_mariages }}</h3>
-                    <small class="text-success"><i class="bi bi-arrow-up"></i> +5% ce mois</small>
+                    <h3 class="fw-bold mb-0" id="kpi-total-mariages">{{ total_mariages }}</h3>
+                    <small id="kpi-variation-mariages" class="{% if variation_mariages_dir == 'down' %}text-danger{% elif variation_mariages_dir == 'up' %}text-success{% else %}text-muted{% endif %}">
+                        {% if variation_mariages_dir == 'up' %}<i class="bi bi-arrow-up"></i>{% elif variation_mariages_dir == 'down' %}<i class="bi bi-arrow-down"></i>{% endif %}
+                        {{ variation_mariages_pct }}% ce mois
+                    </small>
                 </div>
             </div>
         </div>
@@ -24,8 +31,8 @@
             <div class="card border-0 border-start border-warning border-4 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted small text-uppercase fw-bold">Dossiers en cours</h6>
-                    <h3 class="fw-bold mb-0">{{ dossiers_en_cours }}</h3>
-                    <small class="text-muted">En attente de validation</small>
+                    <h3 class="fw-bold mb-0" id="kpi-dossiers-cours">{{ dossiers_en_cours }}</h3>
+                    <small class="text-muted">En attente ou en cours</small>
                 </div>
             </div>
         </div>
@@ -33,7 +40,7 @@
             <div class="card border-0 border-start border-info border-4 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted small text-uppercase fw-bold">Citoyens enregistrés</h6>
-                    <h3 class="fw-bold mb-0">{{ total_epoux }}</h3>
+                    <h3 class="fw-bold mb-0" id="kpi-total-epoux">{{ total_epoux }}</h3>
                     <small class="text-muted">Époux et Épouses</small>
                 </div>
             </div>
@@ -42,8 +49,27 @@
             <div class="card border-0 border-start border-success border-4 shadow-sm">
                 <div class="card-body">
                     <h6 class="text-muted small text-uppercase fw-bold">Taux de succès</h6>
-                    <h3 class="fw-bold mb-0">98%</h3>
-                    <small class="text-success">Dossiers validés</small>
+                    <h3 class="fw-bold mb-0"><span id="kpi-taux-succes">{{ taux_succes }}</span>%</h3>
+                    <small class="text-muted"><span id="kpi-dossiers-valides">{{ dossiers_valides }}</span> / <span id="kpi-total-dossiers">{{ total_dossiers }}</span> dossiers validés</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body py-2 small">
+                    <i class="bi bi-heart-fill text-danger me-1"></i>
+                    Mariages actifs : <strong id="kpi-mariages-actifs">{{ mariages_actifs }}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body py-2 small">
+                    <i class="bi bi-heartbreak text-dark me-1"></i>
+                    Divorces enregistrés : <strong id="kpi-total-divorces">{{ total_divorces }}</strong>
                 </div>
             </div>
         </div>
@@ -67,53 +93,43 @@
                     <h6 class="m-0 fw-bold text-primary">Activités récentes</h6>
                 </div>
                 <div class="card-body p-0">
-                    <div class="list-group list-group-flush">
-                        {% for mariage in derniers_mariages|slice:":5" %}
+                    <div class="list-group list-group-flush" id="dash-activites-list">
+                        {% for act in activites_recentes %}
                         <div class="list-group-item border-0 px-4 py-3">
-                            <div class="d-flex justify-content-between">
-                                <span class="fw-bold small">{{ mariage.epoux.nom }} & {{ mariage.epouse.nom }}</span>
-                                <span class="text-muted x-small">{{ mariage.date_mariage|date:"d/m" }}</span>
+                            <div class="d-flex justify-content-between align-items-start">
+                                <span class="fw-bold small">{{ act.titre }}</span>
+                                <span class="text-muted x-small">{{ act.date_label }}</span>
                             </div>
-                            <p class="text-muted mb-0 small">Acte n° {{ mariage.numero_acte }}</p>
+                            <p class="text-muted mb-1 small">{{ act.detail }}</p>
+                            <span class="badge {{ act.badge_class }}">{{ act.badge_label }}</span>
+                        </div>
+                        {% empty %}
+                        <div class="list-group-item border-0 px-4 py-4 text-muted text-center small">
+                            Aucune activité récente.
                         </div>
                         {% endfor %}
                     </div>
                 </div>
                 <div class="card-footer bg-white text-center">
-                    <a href="{% url 'mariage_list' %}" class="small text-decoration-none">Voir tout</a>
+                    <a href="{% url 'mariage_list' %}" class="small text-decoration-none me-3">Mariages</a>
+                    <a href="{% url 'divorce_list' %}" class="small text-decoration-none">Divorces</a>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+{{ chart_labels|json_script:"dash-chart-labels" }}
+{{ chart_data|json_script:"dash-chart-data" }}
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'mariage/js/dashboard.js' %}"></script>
 <script>
-    const ctx = document.getElementById('mariageChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin'],
-            datasets: [{
-                label: 'Mariages par mois',
-                data: {{ stats_mensuelles|safe }},
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { beginAtZero: true, grid: { borderDash: [2, 2] } },
-                x: { grid: { display: false } }
-            }
-        }
+    initDashboardMain({
+        labels: JSON.parse(document.getElementById('dash-chart-labels').textContent),
+        data: JSON.parse(document.getElementById('dash-chart-data').textContent),
     });
 </script>
 {% endblock %}
