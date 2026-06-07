@@ -24,6 +24,22 @@ from .models import (
     photo_conjoint_affichage,
 )
 from .dashboard_stats import stats_dashboard_bourgmestre, stats_dashboard_general
+from .liste_filtres import (
+    appliquer_filtres_divorce,
+    appliquer_filtres_dossier,
+    appliquer_filtres_mariage,
+    contexte_filtres_liste,
+    filtrer_mariages_par_acces,
+    filtres_actifs,
+    lire_parametres_filtre,
+)
+from .permissions_commune import (
+    commune_caisse_active,
+    communes_accessibles,
+    filtrer_dossiers_par_acces,
+    role_utilisateur,
+    utilisateur_peut_acceder_caisse,
+)
 from .services_biometrie import ReconnaissanceFacialeService
 from .verification_dossier import (
     appliquer_resultat_verif,
@@ -283,14 +299,79 @@ class EpouseCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
 # 4. ADMINISTRATION DU DOSSIER
 # ==========================================
 
+def _decode_b64_fichier(data_b64, nom_fichier='fichier.bin'):
+    if not data_b64:
+        return None
+    payload = data_b64
+    if ';base64,' in payload:
+        payload = payload.split(';base64,', 1)[1]
+    elif payload.startswith('data:') and ',' in payload:
+        payload = payload.split(',', 1)[1]
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except (ValueError, base64.binascii.Error):
+        return None
+    return ContentFile(raw, name=nom_fichier)
+
+
+def _fichiers_formulaire_avec_session(request, etat_verif):
+    """Complète les fichiers manquants à partir de la session de vérification."""
+    fichiers = request.FILES.copy()
+    for prefix, role in (('e', 'epoux'), ('f', 'epouse')):
+        if not fichiers.get(f'{prefix}_photo'):
+            cf = _decode_b64_fichier(
+                etat_verif.get(f'photo_b64_{role}'),
+                f'photo_{role}.jpg',
+            )
+            if cf:
+                fichiers[f'{prefix}_photo'] = cf
+        if (
+            not fichiers.get(f'{prefix}_scan_empreinte')
+            and etat_verif.get('type') == 'empreinte'
+        ):
+            cf = _decode_b64_fichier(
+                etat_verif.get(f'empreinte_b64_{role}'),
+                etat_verif.get(f'empreinte_nom_{role}') or f'empreinte_{role}.png',
+            )
+            if cf:
+                fichiers[f'{prefix}_scan_empreinte'] = cf
+    return fichiers
+
+
+def _identite_prefill(identite):
+    """Identité préremplie avec clés toujours définies (évite erreurs template)."""
+    identite = identite or {}
+    return {
+        'nom': identite.get('nom', ''),
+        'postnom': identite.get('postnom', ''),
+        'prenom': identite.get('prenom', ''),
+    }
+
+
+def _commune_agent_utilisateur(user):
+    if user.commune_id:
+        return user.commune
+    if user.is_superuser:
+        return Commune.objects.first()
+    return None
+
+
+def _creer_empreinte_depuis_fichier(fichier):
+    if not fichier:
+        return None
+    return EmpreinteDigitale.objects.create(empreinte=fichier, doigt="Index Droit")
+
+
 class DossierListView(SmartSecurityMixin, ListView):
-    allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE']
+    allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
     model = Dossier
     template_name = 'mariage/dossiers/dossier_list.html'
     context_object_name = 'dossiers'
+    limite_defaut = 10
 
     def get_queryset(self):
-        return Dossier.objects.select_related(
+        params = lire_parametres_filtre(self.request)
+        qs = Dossier.objects.select_related(
             'epoux',
             'epouse',
             'epoux__reconnaissance_faciale',
@@ -298,6 +379,19 @@ class DossierListView(SmartSecurityMixin, ListView):
             'commune_enregistrement',
             'utilisateur',
         ).prefetch_related('temoins').order_by('-date_creation')
+        qs = filtrer_dossiers_par_acces(self.request.user, qs)
+        qs = appliquer_filtres_dossier(qs, params)
+        if not filtres_actifs(params):
+            qs = qs[:self.limite_defaut]
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        params = lire_parametres_filtre(self.request)
+        context.update(contexte_filtres_liste(
+            self.request, params, 'dossier', self.limite_defaut, self.request.user
+        ))
+        return context
 
 
 class DossierVerificationAntiPolygamieAPIView(LoginRequiredMixin, View):
@@ -343,6 +437,15 @@ class DossierVerificationAntiPolygamieAPIView(LoginRequiredMixin, View):
                     'etat': etat,
                 })
 
+            if type_verif == 'empreinte':
+                fichier = request.FILES.get('scan_empreinte')
+                if fichier:
+                    fichier.seek(0)
+                    resultat['empreinte_b64'] = base64.b64encode(fichier.read()).decode('ascii')
+                    fichier.seek(0)
+            elif type_verif == 'faciale':
+                resultat['photo_base64'] = request.POST.get('image_base64', '')
+
             etat = appliquer_resultat_verif(etat, type_verif, role, resultat)
             sauver_etat_verif(request.session, etat)
 
@@ -379,20 +482,21 @@ class DossierCreateView(SmartSecurityMixin, View):
             'verif_etat': etat_verif,
             'empreinte_epoux_valide': etat_verif.get('empreinte_epoux', ''),
             'empreinte_epouse_valide': etat_verif.get('empreinte_epouse', ''),
+            'prefill_epoux': _identite_prefill(etat_verif.get('identite_epoux')),
+            'prefill_epouse': _identite_prefill(etat_verif.get('identite_epouse')),
+            'verif_type': etat_verif.get('type'),
+            'is_edit': False,
         }
 
     def get(self, request, *args, **kwargs):
-        if request.user.is_superuser:
-            commune_agent = Commune.objects.first()
-        else:
-            commune_agent = request.user.commune
+        commune_agent = _commune_agent_utilisateur(request.user)
 
         etat_verif = lire_etat_verif(request.session)
         context = self._contexte_formulaire(request, commune_agent, etat_verif)
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
-        commune_agent = Commune.objects.first() if request.user.is_superuser else request.user.commune
+        commune_agent = _commune_agent_utilisateur(request.user)
         etat_verif = lire_etat_verif(request.session)
 
         if 'reinitialiser_verification' in request.POST:
@@ -411,27 +515,27 @@ class DossierCreateView(SmartSecurityMixin, View):
 
         # ACTION : ENREGISTREMENT DU CŒUR DE SAISIE (4 BLOCS)
         if 'enregistrer_coeur_saisie' in request.POST:
+            fichiers = _fichiers_formulaire_avec_session(request, etat_verif)
+            erreurs_photo = []
+            if not fichiers.get('e_photo'):
+                erreurs_photo.append("La photo du futur époux est obligatoire.")
+            if not fichiers.get('f_photo'):
+                erreurs_photo.append("La photo de la future épouse est obligatoire.")
+            if erreurs_photo:
+                for msg in erreurs_photo:
+                    messages.error(request, msg)
+                context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                return render(request, self.template_name, context)
+
             try:
                 with transaction.atomic():
-                    
-                    # --- ÉTAPE PRÉALABLE : CRÉATION DES INSTANCES D'EMPREINTES ---
-                    nom_fichier_epoux = request.POST.get('e_empreinte_nom') or etat_verif.get('empreinte_epoux')
-                    nom_fichier_epouse = request.POST.get('f_empreinte_nom') or etat_verif.get('empreinte_epouse')
-                    
-                    empreinte_obj_epoux = None
-                    empreinte_obj_epouse = None
-                    
-                    if nom_fichier_epoux:
-                        empreinte_obj_epoux = EmpreinteDigitale.objects.create(
-                            empreinte=nom_fichier_epoux,
-                            doigt="Index Droit"
-                        )
-                        
-                    if nom_fichier_epouse:
-                        empreinte_obj_epouse = EmpreinteDigitale.objects.create(
-                            empreinte=nom_fichier_epouse,
-                            doigt="Index Droit"
-                        )
+
+                    empreinte_obj_epoux = _creer_empreinte_depuis_fichier(
+                        fichiers.get('e_scan_empreinte')
+                    )
+                    empreinte_obj_epouse = _creer_empreinte_depuis_fichier(
+                        fichiers.get('f_scan_empreinte')
+                    )
 
                     # --- CORRECTION ET SÉCURITÉ DES DONNÉES POST ---
                     prof_epoux = request.POST.get('e_profession') or "Sans"
@@ -452,7 +556,7 @@ class DossierCreateView(SmartSecurityMixin, View):
                         profession=prof_epoux,
                         empreinte_digitale=empreinte_obj_epoux
                     )
-                    _maj_conjoint_modification(epoux, 'e', request.POST, request.FILES)
+                    _maj_conjoint_modification(epoux, 'e', request.POST, fichiers)
 
                     # --- BLOC 2 : L'ÉPOUSE ---
                     epouse = Epouse.objects.create(
@@ -466,7 +570,7 @@ class DossierCreateView(SmartSecurityMixin, View):
                         profession=prof_epouse,
                         empreinte_digitale=empreinte_obj_epouse
                     )
-                    _maj_conjoint_modification(epouse, 'f', request.POST, request.FILES)
+                    _maj_conjoint_modification(epouse, 'f', request.POST, fichiers)
 
                     # --- BLOC 3 : LE DOSSIER (SÉCURISÉ CONTRE LES DOUBLONS) ---
                     # 1. On récupère le numéro s'il vient du formulaire
@@ -601,9 +705,11 @@ class MariageListView(LoginRequiredMixin, ListView):
     template_name = 'mariage/mariages/mariage_list.html'
     context_object_name = 'mariages'
     paginate_by = None
+    limite_defaut = 10
 
     def get_queryset(self):
-        return (
+        params = lire_parametres_filtre(self.request)
+        qs = (
             Mariage.objects.select_related(
                 'epoux',
                 'epouse',
@@ -612,8 +718,21 @@ class MariageListView(LoginRequiredMixin, ListView):
                 'dossier__commune_enregistrement__ville__province',
                 'agent',
             )
-            .order_by('-date_enregistrement')[:20]
+            .order_by('-date_enregistrement')
         )
+        qs = filtrer_mariages_par_acces(self.request.user, qs)
+        qs = appliquer_filtres_mariage(qs, params)
+        if not filtres_actifs(params):
+            qs = qs[:self.limite_defaut]
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        params = lire_parametres_filtre(self.request)
+        context.update(contexte_filtres_liste(
+            self.request, params, 'mariage', self.limite_defaut, self.request.user
+        ))
+        return context
 
 
 class MariageDetailView(LoginRequiredMixin, DetailView):
@@ -971,16 +1090,30 @@ class DivorceListView(SmartSecurityMixin, ListView):
     model = Divorce
     template_name = 'mariage/divorces/divorce_list.html'
     context_object_name = 'divorces'
+    limite_defaut = 20
 
     def get_queryset(self):
-        return (
+        params = lire_parametres_filtre(self.request)
+        qs = (
             Divorce.objects.select_related(
                 'mariage__epoux',
                 'mariage__epouse',
                 'mariage__dossier__commune_enregistrement',
             )
-            .order_by('-date_enregistrement')[:20]
+            .order_by('-date_enregistrement')
         )
+        qs = appliquer_filtres_divorce(qs, params)
+        if not filtres_actifs(params):
+            qs = qs[:self.limite_defaut]
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        params = lire_parametres_filtre(self.request)
+        context.update(contexte_filtres_liste(
+            self.request, params, 'divorce', self.limite_defaut, self.request.user
+        ))
+        return context
 
 
 class MariageRechercheDivorceNominativeAPIView(LoginRequiredMixin, View):
@@ -1372,46 +1505,38 @@ class BourgmestreDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'mariage/dashboard_bourgmestre.html'
 
     def dispatch(self, request, *args, **kwargs):
-        if request.user.is_superuser:
-            return super().dispatch(request, *args, **kwargs)
-            
-        if not getattr(request.user, 'role', None) or request.user.role.upper() != 'BOURGMESTRE':
-            messages.error(request, "Accès réservé aux Bourgmestres.")
+        if not utilisateur_peut_acceder_caisse(request.user):
+            messages.error(request, "Accès réservé aux agents habilités à consulter la caisse communale.")
             return redirect('dashboard')
-            
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-
-        if self.request.user.is_superuser:
-            commune = Commune.objects.first()
-            role_label = "SUPER-ADMINISTRATEUR"
-        else:
-            commune = self.request.user.commune
-            role_label = self.request.user.role
-
+        communes = list(communes_accessibles(self.request.user))
+        commune = commune_caisse_active(
+            self.request.user,
+            self.request.GET.get('commune'),
+        )
         context.update(stats_dashboard_bourgmestre(commune))
-        context['role'] = role_label
+        context['communes_accessibles'] = communes
+        context['commune_courante'] = commune
+        if self.request.user.is_superuser:
+            context['role'] = 'SUPER-ADMINISTRATEUR'
+        else:
+            context['role'] = self.request.user.get_role_display()
         return context
 
 
 class BourgmestreStatsAPIView(LoginRequiredMixin, View):
-    """API JSON pour actualisation du tableau de bord bourgmestre."""
+    """API JSON pour actualisation du tableau de bord caisse communale."""
 
     def dispatch(self, request, *args, **kwargs):
-        if request.user.is_superuser:
-            return super().dispatch(request, *args, **kwargs)
-        if not getattr(request.user, 'role', None) or request.user.role.upper() != 'BOURGMESTRE':
+        if not utilisateur_peut_acceder_caisse(request.user):
             return JsonResponse({'success': False, 'errors': ['Accès refusé.']}, status=403)
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request):
-        if request.user.is_superuser:
-            commune = Commune.objects.first()
-        else:
-            commune = request.user.commune
-
+        commune = commune_caisse_active(request.user, request.GET.get('commune'))
         stats = stats_dashboard_bourgmestre(commune)
         return JsonResponse({
             'success': True,
@@ -1422,6 +1547,7 @@ class BourgmestreStatsAPIView(LoginRequiredMixin, View):
             'recettes_semaine': stats['recettes_semaine'],
             'stats_graph': stats['stats_graph'],
             'commune_nom': stats['commune'].nom if stats['commune'] else '—',
+            'commune_id': stats['commune'].pk if stats['commune'] else None,
             'derniere_mise_a_jour': (
                 stats['derniere_mise_a_jour'].strftime('%d/%m/%Y %H:%M')
                 if stats['derniere_mise_a_jour'] else '—'

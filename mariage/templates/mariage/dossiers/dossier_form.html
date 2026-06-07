@@ -13,10 +13,13 @@
                 <p class="text-muted m-0 small">Guichet unique d'enregistrement de l'État Civil</p>
             </div>
             <div class="text-end">
-                {% if commune_agent %}
+                {% if commune_agent and not etape_biometrie %}
                 <span class="badge bg-primary px-3 py-2 fs-6">Commune : {{ commune_agent.nom }}</span>
-                {% endif %}
                 <p class="m-0 text-muted small mt-1">{% if is_edit %}Modification du dossier{% else %}Saisie affectée automatiquement{% endif %}</p>
+                {% elif not is_edit and etape_biometrie %}
+                <span class="badge bg-secondary px-3 py-2 fs-6"><i class="bi bi-globe2 me-1"></i> Recherche nationale</span>
+                <p class="m-0 text-muted small mt-1">Vérification sur toutes les communes</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -93,7 +96,6 @@
     {% if etape_biometrie and not is_edit %}
     <div class="card shadow border-0 col-lg-10 mx-auto mb-4" id="dossier-verif-container"
          data-verif-url="{% url 'dossier_verifier_conjoint' %}">
-        {{ verif_etat|json_script:"dossier-verif-etat" }}
         <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
             <span><i class="bi bi-shield-exclamation me-2 text-warning"></i> Vérification anti-polygamie (obligatoire)</span>
             <span class="badge bg-warning text-dark" id="verif-progress-badge">Étape 1/2 — Futur époux</span>
@@ -213,13 +215,15 @@
                                     <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
                                 </div>
                                 <div class="card-body text-center">
-                                    <div class="rounded-circle overflow-hidden bg-dark mx-auto mb-2 border border-primary" style="width:120px;height:120px;">
-                                        <video id="dossier-webcam-epoux" autoplay playsinline class="w-100 h-100" style="object-fit:cover;"></video>
+                                    <div class="rounded-circle overflow-hidden bg-secondary mx-auto mb-2 border border-primary position-relative" style="width:160px;height:160px;">
+                                        <video id="dossier-webcam-epoux" autoplay playsinline muted class="w-100 h-100" style="object-fit:cover;"></video>
                                     </div>
+                                    <p class="small text-muted mb-2" id="dossier-webcam-status-epoux">Ouvrez la webcam ou importez une photo.</p>
                                     <canvas id="dossier-canvas-epoux" class="d-none"></canvas>
                                     <input type="hidden" id="dossier-base64-epoux" value="">
-                                    <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="dossier-capture-epoux-btn">
-                                        <i class="bi bi-camera me-1"></i> Capturer
+                                    <input type="file" id="dossier-file-epoux" class="form-control form-control-sm mb-2" accept="image/*" capture="user">
+                                    <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="dossier-capture-epoux-btn" disabled>
+                                        <i class="bi bi-camera me-1"></i> Capturer depuis webcam
                                     </button>
                                     <button type="button" class="btn btn-primary btn-sm w-100 btn-verif-conjoint"
                                             data-type="faciale" data-role="epoux" id="dossier-verif-face-epoux-btn">
@@ -235,13 +239,15 @@
                                     <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
                                 </div>
                                 <div class="card-body text-center">
-                                    <div class="rounded-circle overflow-hidden bg-dark mx-auto mb-2 border border-danger" style="width:120px;height:120px;">
-                                        <video id="dossier-webcam-epouse" autoplay playsinline class="w-100 h-100" style="object-fit:cover;"></video>
+                                    <div class="rounded-circle overflow-hidden bg-secondary mx-auto mb-2 border border-danger position-relative" style="width:160px;height:160px;">
+                                        <video id="dossier-webcam-epouse" autoplay playsinline muted class="w-100 h-100" style="object-fit:cover;"></video>
                                     </div>
+                                    <p class="small text-muted mb-2" id="dossier-webcam-status-epouse">En attente de la vérification de l'époux.</p>
                                     <canvas id="dossier-canvas-epouse" class="d-none"></canvas>
                                     <input type="hidden" id="dossier-base64-epouse" value="">
+                                    <input type="file" id="dossier-file-epouse" class="form-control form-control-sm mb-2" accept="image/*" capture="user" disabled>
                                     <button type="button" class="btn btn-outline-danger btn-sm mb-2" id="dossier-capture-epouse-btn" disabled>
-                                        <i class="bi bi-camera me-1"></i> Capturer
+                                        <i class="bi bi-camera me-1"></i> Capturer depuis webcam
                                     </button>
                                     <button type="button" class="btn btn-danger btn-sm w-100 btn-verif-conjoint" disabled
                                             data-type="faciale" data-role="epouse" id="dossier-verif-face-epouse-btn">
@@ -297,18 +303,18 @@
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Nom *</label>
-                                <input type="text" name="e_nom" value="{{ epoux.nom|default:'' }}" class="form-control form-control-sm text-uppercase" required placeholder="Ex: MBUSA">
+                                <input type="text" name="e_nom" value="{% if is_edit %}{{ epoux.nom|default:'' }}{% else %}{{ prefill_epoux.nom }}{% endif %}" class="form-control form-control-sm text-uppercase" required placeholder="Ex: MBUSA">
                             </div>
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Postnom</label>
-                                <input type="text" name="e_postnom" value="{{ epoux.post_nom|default:'' }}" class="form-control form-control-sm">
+                                <input type="text" name="e_postnom" value="{% if is_edit %}{{ epoux.post_nom|default:'' }}{% else %}{{ prefill_epoux.postnom }}{% endif %}" class="form-control form-control-sm">
                             </div>
                         </div>
 
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Prénom</label>
-                                <input type="text" name="e_prenom" value="{{ epoux.prenom|default:'' }}" class="form-control form-control-sm">
+                                <input type="text" name="e_prenom" value="{% if is_edit %}{{ epoux.prenom|default:'' }}{% else %}{{ prefill_epoux.prenom }}{% endif %}" class="form-control form-control-sm">
                             </div>
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Téléphone *</label>
@@ -328,10 +334,18 @@
                             </div>
                         </div>
 
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-primary mb-1" style="font-size: 0.75rem;"><i class="bi bi-camera"></i> Photo (visage) *</label>
+                                <input type="file" name="e_photo" id="e_photo_input" class="form-control form-control-sm" accept="image/*" {% if not is_edit %}required{% endif %}>
+                                <img id="e_photo_preview" class="rounded-circle border mt-1 d-none" width="48" height="48" style="object-fit:cover;" alt="Aperçu photo époux">
+                            </div>
+                        </div>
+
                         {% if not is_edit %}
-                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2">
-                            <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-primary"></i> Enregistrement Empreinte Époux *</label>
-                            <input type="file" name="e_scan_empreinte" class="form-control form-control-sm">
+                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2" id="bloc-empreinte-epoux">
+                            <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-primary"></i> Enregistrement Empreinte Époux {% if verif_type == 'empreinte' %}*{% endif %}</label>
+                            <input type="file" name="e_scan_empreinte" id="e_scan_empreinte" class="form-control form-control-sm" accept="image/*" {% if verif_type == 'empreinte' %}required{% endif %}>
                         </div>
                         {% endif %}
 
@@ -351,18 +365,18 @@
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Nom *</label>
-                                <input type="text" name="f_nom" value="{{ epouse.nom|default:'' }}" class="form-control form-control-sm text-uppercase" required>
+                                <input type="text" name="f_nom" value="{% if is_edit %}{{ epouse.nom|default:'' }}{% else %}{{ prefill_epouse.nom }}{% endif %}" class="form-control form-control-sm text-uppercase" required>
                             </div>
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Postnom</label>
-                                <input type="text" name="f_postnom" value="{{ epouse.post_nom|default:'' }}" class="form-control form-control-sm">
+                                <input type="text" name="f_postnom" value="{% if is_edit %}{{ epouse.post_nom|default:'' }}{% else %}{{ prefill_epouse.postnom }}{% endif %}" class="form-control form-control-sm">
                             </div>
                         </div>
 
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Prénom</label>
-                                <input type="text" name="f_prenom" value="{{ epouse.prenom|default:'' }}" class="form-control form-control-sm">
+                                <input type="text" name="f_prenom" value="{% if is_edit %}{{ epouse.prenom|default:'' }}{% else %}{{ prefill_epouse.prenom }}{% endif %}" class="form-control form-control-sm">
                             </div>
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Téléphone *</label>
@@ -382,10 +396,18 @@
                             </div>
                         </div>
 
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label lh-1 small fw-bold text-danger mb-1" style="font-size: 0.75rem;"><i class="bi bi-camera"></i> Photo (visage) *</label>
+                                <input type="file" name="f_photo" id="f_photo_input" class="form-control form-control-sm" accept="image/*" {% if not is_edit %}required{% endif %}>
+                                <img id="f_photo_preview" class="rounded-circle border mt-1 d-none" width="48" height="48" style="object-fit:cover;" alt="Aperçu photo épouse">
+                            </div>
+                        </div>
+
                         {% if not is_edit %}
-                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2">
-                            <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-danger"></i> Enregistrement Empreinte Épouse *</label>
-                            <input type="file" name="f_scan_empreinte" class="form-control form-control-sm">
+                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded mb-2" id="bloc-empreinte-epouse">
+                            <label class="form-label lh-1 small fw-bold text-dark mb-1" style="font-size: 0.75rem;"><i class="bi bi-fingerprint text-danger"></i> Enregistrement Empreinte Épouse {% if verif_type == 'empreinte' %}*{% endif %}</label>
+                            <input type="file" name="f_scan_empreinte" id="f_scan_empreinte" class="form-control form-control-sm" accept="image/*" {% if verif_type == 'empreinte' %}required{% endif %}>
                         </div>
                         {% endif %}
 
@@ -688,10 +710,15 @@
     {% endif %}
 
 </div>
+{% if not is_edit %}
+{{ verif_etat|json_script:"dossier-verif-etat" }}
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 {% if etape_biometrie and not is_edit %}
 <script src="{% static 'mariage/js/dossier_verification.js' %}"></script>
+{% elif not is_edit %}
+<script src="{% static 'mariage/js/dossier_prefill.js' %}"></script>
 {% endif %}
 {% endblock %}

@@ -3,10 +3,23 @@
 
 {% block content %}
 <div class="container-fluid py-4" id="dashboard-bourgmestre"
-     data-stats-url="{% url 'bourgmestre_stats_api' %}">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold mb-0">Tableau de Bord : Commune de <span id="bm-commune-nom">{{ commune.nom|default:"—" }}</span></h2>
-        <small class="text-muted" id="bm-refresh-label"><i class="bi bi-arrow-repeat"></i> Actualisation auto.</small>
+     data-stats-url="{% url 'bourgmestre_stats_api' %}"
+     data-commune-id="{{ commune_courante.pk|default:'' }}">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="fw-bold mb-0">Caisse communale — <span id="bm-commune-nom">{{ commune.nom|default:"—" }}</span></h2>
+        <div class="d-flex align-items-center gap-2">
+            {% if communes_accessibles|length > 1 %}
+            <form method="get" class="d-flex align-items-center gap-2 m-0">
+                <label class="small text-muted mb-0" for="select-commune-caisse">Commune :</label>
+                <select name="commune" id="select-commune-caisse" class="form-select form-select-sm" onchange="this.form.submit()">
+                    {% for c in communes_accessibles %}
+                    <option value="{{ c.pk }}" {% if commune_courante.pk == c.pk %}selected{% endif %}>{{ c.nom }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+            <small class="text-muted" id="bm-refresh-label"><i class="bi bi-arrow-repeat"></i> Actualisation auto.</small>
+        </div>
     </div>
 
     <div class="row g-3 mb-4">

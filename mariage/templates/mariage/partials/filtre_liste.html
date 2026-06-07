@@ -1,0 +1,69 @@
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small fw-bold mb-1">Date début</label>
+                <input type="date" name="date_debut" class="form-control form-control-sm"
+                       value="{{ filtres.date_debut }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold mb-1">Date fin</label>
+                <input type="date" name="date_fin" class="form-control form-control-sm"
+                       value="{{ filtres.date_fin }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold mb-1">Nom (époux ou épouse)</label>
+                <input type="text" name="nom" class="form-control form-control-sm"
+                       value="{{ filtres.nom }}" placeholder="Nom, postnom ou prénom">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold mb-1">{{ numero_label }}</label>
+                <input type="text" name="numero" class="form-control form-control-sm"
+                       value="{{ filtres.numero }}" placeholder="Recherche partielle">
+            </div>
+            {% if statut_choices %}
+            <div class="col-md-2">
+                <label class="form-label small fw-bold mb-1">Statut</label>
+                <select name="statut" class="form-select form-select-sm">
+                    <option value="">— Tous —</option>
+                    {% for value, label in statut_choices %}
+                    <option value="{{ value }}" {% if filtres.statut == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            {% if type_liste == 'divorce' and communes_filtre %}
+            <div class="col-md-3">
+                <label class="form-label small fw-bold mb-1">Commune</label>
+                <select name="commune" class="form-select form-select-sm">
+                    <option value="">— Toutes les communes —</option>
+                    {% for c in communes_filtre %}
+                    <option value="{{ c.pk }}" {% if filtres.commune == c.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ c.nom }} ({{ c.ville.nom }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-md-auto d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i class="bi bi-funnel me-1"></i> Filtrer
+                </button>
+                <a href="?" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-x-circle me-1"></i> Réinitialiser
+                </a>
+            </div>
+        </form>
+        {% if filtres_actifs %}
+        <p class="small text-muted mb-0 mt-2">
+            <i class="bi bi-info-circle me-1"></i>
+            Filtres actifs — tous les enregistrements correspondants sont affichés.
+        </p>
+        {% else %}
+        <p class="small text-muted mb-0 mt-2">
+            <i class="bi bi-info-circle me-1"></i>
+            Par défaut : les {{ limite_defaut }} derniers enregistrements{% if type_liste != 'divorce' %} de votre commune{% endif %}.
+        </p>
+        {% endif %}
+    </div>
+</div>

@@ -1,5 +1,6 @@
 """Vérification anti-polygamie stricte lors de l'ouverture d'un dossier."""
 import base64
+import hashlib
 
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
@@ -30,6 +31,12 @@ def etat_verif_defaut():
         'empreinte_epouse': '',
         'identite_epoux': {},
         'identite_epouse': {},
+        'empreinte_b64_epoux': '',
+        'empreinte_b64_epouse': '',
+        'empreinte_nom_epoux': '',
+        'empreinte_nom_epouse': '',
+        'photo_b64_epoux': '',
+        'photo_b64_epouse': '',
     }
 
 
@@ -104,8 +111,11 @@ def serialiser_personne_blocante(conjoint, est_epoux, mariage=None, dossier=None
     """Données JSON pour affichage JS (photo, carte, acte)."""
     img_affichage = photo_conjoint_affichage(conjoint)
     photo_profil = _url_image(conjoint.photo)
-    if not photo_profil and img_affichage and img_affichage != conjoint.photo_carte:
-        photo_profil = _url_image(img_affichage)
+    photo_carte = _url_image(conjoint.photo_carte)
+    if not photo_profil and img_affichage:
+        url_affichage = _url_image(img_affichage)
+        if url_affichage and url_affichage != photo_carte:
+            photo_profil = url_affichage
 
     post_nom = _post_nom_conjoint(conjoint)
     data = {
@@ -115,7 +125,7 @@ def serialiser_personne_blocante(conjoint, est_epoux, mariage=None, dossier=None
         'postnom': post_nom,
         'prenom': conjoint.prenom,
         'photo_profil': photo_profil,
-        'photo_carte': _url_image(conjoint.photo_carte),
+        'photo_carte': photo_carte,
         'numero_piece': conjoint.numero_piece,
         'mariage_actif': False,
         'numero_acte': None,
@@ -157,8 +167,9 @@ def _message_blocage(conjoint, est_epoux, mariage, dossier, role_label):
     identite = f"{conjoint.nom} {post_nom} {conjoint.prenom}".strip()
     if mariage and mariage.statut == 'actif':
         return (
-            f"ALERTE POLYGAMIE — {role_label} : {identite} possède déjà un mariage "
-            f"actif (Acte N° {mariage.numero_acte}). Ouverture de dossier refusée."
+            f"⛔ {role_label} — {identite} possède encore un mariage actif "
+            f"(Acte N° {mariage.numero_acte}). Cette personne doit d'abord divorcer "
+            f"avant de pouvoir se remarier. Ouverture de dossier refusée."
         )
     if dossier:
         return (
@@ -236,16 +247,45 @@ def _encodage_facial_conjoint(conjoint):
 
 
 def _trouver_conjoints_par_empreinte(fichier):
-    empreinte = EmpreinteDigitale.objects.filter(empreinte__icontains=fichier.name).first()
-    if not empreinte:
+    """Recherche par empreinte sur toute la base (toutes communes)."""
+    fichier.seek(0)
+    contenu = fichier.read()
+    fichier.seek(0)
+    if not contenu:
         return []
+
+    upload_hash = hashlib.md5(contenu).hexdigest()
+    nom_fichier = (fichier.name or '').lower()
     trouves = []
-    epoux = Epoux.objects.filter(empreinte_digitale=empreinte).first()
-    if epoux:
-        trouves.append((epoux, True))
-    epouse = Epouse.objects.filter(empreinte_digitale=empreinte).first()
-    if epouse:
-        trouves.append((epouse, False))
+    empreintes_vues = set()
+
+    for empreinte in EmpreinteDigitale.objects.exclude(empreinte='').iterator():
+        if empreinte.pk in empreintes_vues:
+            continue
+        correspond = False
+        if empreinte.empreinte and empreinte.empreinte.name:
+            nom_stocke = empreinte.empreinte.name.lower()
+            if nom_fichier and (
+                nom_fichier in nom_stocke
+                or nom_stocke.split('/')[-1] == nom_fichier
+            ):
+                correspond = True
+            elif default_storage.exists(empreinte.empreinte.name):
+                try:
+                    with default_storage.open(empreinte.empreinte.name, 'rb') as stocke:
+                        if hashlib.md5(stocke.read()).hexdigest() == upload_hash:
+                            correspond = True
+                except OSError:
+                    pass
+        if not correspond:
+            continue
+        empreintes_vues.add(empreinte.pk)
+        epoux = Epoux.objects.filter(empreinte_digitale=empreinte).first()
+        if epoux:
+            trouves.append((epoux, True))
+        epouse = Epouse.objects.filter(empreinte_digitale=empreinte).first()
+        if epouse:
+            trouves.append((epouse, False))
     return trouves
 
 
@@ -334,12 +374,14 @@ def verifier_facial(role, image_base64):
     if not image_base64:
         raise ValidationError(f"Capturez la photo du {role_label.lower()} avant de vérifier.")
 
+    original_b64 = image_base64
     try:
-        if ';base64,' in image_base64:
-            image_base64 = image_base64.split(';base64,', 1)[1]
-        elif ',' in image_base64:
-            image_base64 = image_base64.split(',', 1)[1]
-        image_data = base64.b64decode(image_base64, validate=True)
+        payload = image_base64
+        if ';base64,' in payload:
+            payload = payload.split(';base64,', 1)[1]
+        elif ',' in payload:
+            payload = payload.split(',', 1)[1]
+        image_data = base64.b64decode(payload, validate=True)
         content_file = ContentFile(image_data, name='verif_dossier.jpg')
         encodage_capture = ReconnaissanceFacialeService.extraire_encodage_facial(content_file)
     except ValidationError:
@@ -359,6 +401,7 @@ def verifier_facial(role, image_base64):
         return {
             'ok': True,
             'message': f"{role_label} vérifié — visage inconnu du système (aucun antécédent bloquant).",
+            'photo_base64': original_b64,
         }
 
     correspondance = ReconnaissanceFacialeService.meilleure_correspondance(
@@ -394,11 +437,13 @@ def verifier_facial(role, image_base64):
                 f"{role_label} vérifié — visage reconnu (confiance {confiance} %) "
                 f"sans mariage actif ni dossier bloquant."
             ),
+            'photo_base64': original_b64,
         }
 
     return {
         'ok': True,
         'message': f"{role_label} vérifié — visage non reconnu ; aucun antécédent bloquant.",
+        'photo_base64': original_b64,
     }
 
 
@@ -416,6 +461,11 @@ def appliquer_resultat_verif(etat, type_verif, role, resultat):
             etat['empreinte_epoux'] = resultat['empreinte_nom']
         if resultat.get('identite'):
             etat['identite_epoux'] = resultat['identite']
+        if resultat.get('empreinte_b64'):
+            etat['empreinte_b64_epoux'] = resultat['empreinte_b64']
+            etat['empreinte_nom_epoux'] = resultat.get('empreinte_nom', '')
+        if resultat.get('photo_base64'):
+            etat['photo_b64_epoux'] = resultat['photo_base64']
     else:
         if not etat.get('epoux_ok'):
             raise ValidationError(
@@ -426,5 +476,10 @@ def appliquer_resultat_verif(etat, type_verif, role, resultat):
             etat['empreinte_epouse'] = resultat['empreinte_nom']
         if resultat.get('identite'):
             etat['identite_epouse'] = resultat['identite']
+        if resultat.get('empreinte_b64'):
+            etat['empreinte_b64_epouse'] = resultat['empreinte_b64']
+            etat['empreinte_nom_epouse'] = resultat.get('empreinte_nom', '')
+        if resultat.get('photo_base64'):
+            etat['photo_b64_epouse'] = resultat['photo_base64']
 
     return etat

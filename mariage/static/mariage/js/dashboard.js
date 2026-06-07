@@ -139,7 +139,9 @@ function initDashboardBourgmestre(initial) {
     function refresh() {
         const url = container.dataset.statsUrl;
         if (!url) return;
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        const communeId = container.dataset.communeId;
+        const fullUrl = communeId ? url + '?commune=' + encodeURIComponent(communeId) : url;
+        fetch(fullUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.success) applyStats(data);

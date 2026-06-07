@@ -58,7 +58,7 @@
                         </a>
                     </li>
 
-                    {% if user.is_superuser or user.role|upper == 'BOURGMESTRE' %}
+                    {% if user.is_superuser or user.role|upper == 'HIERARCHIE' or user.role|upper == 'MAIRE' or user.role|upper == 'BOURGMESTRE' or user.role|upper == 'OFFICIER' or user.role|upper == 'OPERATEUR' %}
                         <li class="nav-item">
                             <a class="nav-link text-warning {% if 'bourgmestre' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'bourgmestre_dashboard' %}">
                                 <i class="bi bi-cash-coin me-2"></i> Caisse de la commune pour les frais du mariage

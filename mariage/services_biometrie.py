@@ -42,30 +42,118 @@ class ReconnaissanceFacialeService:
     MODEL = 'hog'
 
     @staticmethod
-    def extraire_encodage_facial(image_path):
-        """Extrait l'encodage facial d'une image (128 dimensions).
+    def _verifier_compatibilite_numpy():
+        """dlib / face_recognition ne supportent pas numpy 2.x."""
+        np = _import_numpy()
+        major = int(str(np.__version__).split('.')[0])
+        if major >= 2:
+            raise ValidationError(
+                "numpy 2.x est incompatible avec la reconnaissance faciale (dlib). "
+                "Dans l'environnement virtuel : pip install \"numpy>=1.24.3,<2.0\""
+            )
 
-        Accepte un chemin de fichier ou un objet file-like (ContentFile, BytesIO…).
-        """
+    @staticmethod
+    def _charger_image_rgb(image_source):
+        """Charge une image en tableau numpy RGB uint8 (compatible dlib)."""
+        ReconnaissanceFacialeService._verifier_compatibilite_numpy()
+        np = _import_numpy()
+        face_recognition = _import_face_recognition()
+        try:
+            from PIL import Image, ImageOps
+        except ImportError as exc:
+            raise ValidationError(
+                "Le module Pillow n'est pas installé. Exécutez : pip install Pillow"
+            ) from exc
+
+        import io
+        import os
+        import tempfile
+
+        if hasattr(image_source, 'read'):
+            image_source.seek(0)
+            raw = image_source.read()
+            image_source.seek(0)
+            if not raw:
+                raise ValidationError("Fichier image vide.")
+            try:
+                pil = Image.open(io.BytesIO(raw))
+                pil = ImageOps.exif_transpose(pil)
+                pil = pil.convert('RGB')
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
+                    pil.save(tmp, format='JPEG', quality=95)
+                    tmp_path = tmp.name
+                try:
+                    image = face_recognition.load_image_file(tmp_path)
+                finally:
+                    os.unlink(tmp_path)
+            except ValidationError:
+                raise
+            except Exception as exc:
+                raise ValidationError(f"Image illisible : {exc}") from exc
+        else:
+            image = face_recognition.load_image_file(str(image_source))
+
+        return np.ascontiguousarray(image, dtype=np.uint8)
+
+    @staticmethod
+    def _localiser_visages(image, face_recognition):
+        """Détection robuste (upsampling + agrandissement si image petite)."""
+        np = _import_numpy()
+
+        for upsample in (2, 1, 3):
+            locations = face_recognition.face_locations(
+                image,
+                model=ReconnaissanceFacialeService.MODEL,
+                number_of_times_to_upsample=upsample,
+            )
+            if locations:
+                return locations, image
+
+        h, w = image.shape[:2]
+        if max(h, w) < 600:
+            try:
+                import cv2
+                scale = 600 / max(h, w)
+                resized = cv2.resize(
+                    image,
+                    (int(w * scale), int(h * scale)),
+                    interpolation=cv2.INTER_CUBIC,
+                )
+                resized = np.ascontiguousarray(resized, dtype=np.uint8)
+                for upsample in (2, 3):
+                    locations = face_recognition.face_locations(
+                        resized,
+                        model=ReconnaissanceFacialeService.MODEL,
+                        number_of_times_to_upsample=upsample,
+                    )
+                    if locations:
+                        return locations, resized
+            except ImportError:
+                pass
+
+        return [], image
+
+    @staticmethod
+    def extraire_encodage_facial(image_path):
+        """Extrait l'encodage facial d'une image (128 dimensions)."""
         face_recognition = _import_face_recognition()
 
         try:
-            if hasattr(image_path, 'read'):
-                image_path.seek(0)
-                image = face_recognition.load_image_file(image_path)
-            else:
-                image = face_recognition.load_image_file(str(image_path))
-            face_locations = face_recognition.face_locations(
-                image, model=ReconnaissanceFacialeService.MODEL
+            image = ReconnaissanceFacialeService._charger_image_rgb(image_path)
+            face_locations, image_travail = ReconnaissanceFacialeService._localiser_visages(
+                image, face_recognition
             )
 
             if not face_locations:
-                raise ValidationError("Aucun visage détecté sur la photo.")
+                raise ValidationError(
+                    "Aucun visage détecté sur la photo. Assurez-vous que le visage est "
+                    "bien visible, éclairé et centré, puis réessayez."
+                )
 
             if len(face_locations) > 1:
                 raise ValidationError("Plusieurs visages détectés. Une seule personne par photo.")
 
-            encodages = face_recognition.face_encodings(image, face_locations)
+            encodages = face_recognition.face_encodings(image_travail, face_locations)
             return encodages[0] if encodages else None
 
         except ValidationError:
@@ -88,7 +176,7 @@ class ReconnaissanceFacialeService:
         """Valide la qualité et la clarté d'une photo"""
         face_recognition = _import_face_recognition()
         try:
-            image = face_recognition.load_image_file(str(image_path))
+            image = ReconnaissanceFacialeService._charger_image_rgb(image_path)
             face_locations = face_recognition.face_locations(
                 image, model=ReconnaissanceFacialeService.MODEL
             )
