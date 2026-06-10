@@ -1,8 +1,9 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import (
-    Province, Utilisateur, Commune, Mariage, EmpreinteDigitale, 
-    Epoux, Epouse, Dossier, Paiement, Document, Temoin, Divorce, Ville
+    Province, Utilisateur, Commune, Mariage, EmpreinteDigitale,
+    Epoux, Epouse, Dossier, Paiement, Document, Temoin, Divorce, Ville,
+    ProfilCitoyen, SessionCaptureMobile,
 )
 
 # ==========================================================
@@ -10,9 +11,24 @@ from .models import (
 # ==========================================================
 @admin.register(Utilisateur)
 class UtilisateurAdmin(UserAdmin):
-    list_display = ('username', 'role', 'commune', 'is_staff')
+    list_display = (
+        'username', 'role', 'commune', 'ville', 'affecte_mairie',
+        'epoux_lie', 'epouse_lie', 'is_staff',
+    )
+    list_filter = ('role', 'affecte_mairie', 'commune', 'ville')
+    search_fields = ('username', 'first_name', 'last_name', 'email')
     fieldsets = UserAdmin.fieldsets + (
-        ('Informations Complémentaires', {'fields': ('telephone', 'role', 'commune')}),
+        ('Informations complémentaires', {
+            'fields': (
+                'telephone', 'role', 'commune', 'ville', 'affecte_mairie',
+                'epoux_lie', 'epouse_lie',
+            ),
+        }),
+    )
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        ('Informations complémentaires', {
+            'fields': ('telephone', 'role', 'commune', 'ville', 'affecte_mairie'),
+        }),
     )
 
 # ==========================================================
@@ -69,3 +85,5 @@ admin.site.register(Ville)
 admin.site.register(Commune)
 admin.site.register(EmpreinteDigitale)
 admin.site.register(Temoin)
+admin.site.register(ProfilCitoyen)
+admin.site.register(SessionCaptureMobile)

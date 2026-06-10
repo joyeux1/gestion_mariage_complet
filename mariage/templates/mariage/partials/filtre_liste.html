@@ -1,6 +1,7 @@
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-3">
-        <form method="get" class="row g-2 align-items-end">
+        <form method="get" class="row g-2 align-items-end"
+              {% if type_liste == 'dossier' %}id="form-filtre-dossiers" data-search-url="{% url 'dossier_liste_recherche' %}"{% endif %}>
             <div class="col-md-2">
                 <label class="form-label small fw-bold mb-1">Date début</label>
                 <input type="date" name="date_debut" class="form-control form-control-sm"
@@ -13,13 +14,14 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label small fw-bold mb-1">Nom (époux ou épouse)</label>
-                <input type="text" name="nom" class="form-control form-control-sm"
-                       value="{{ filtres.nom }}" placeholder="Nom, postnom ou prénom">
+                <input type="text" name="nom" class="form-control form-control-sm{% if type_liste == 'dossier' %} dossier-filtre-live{% endif %}"
+                       value="{{ filtres.nom }}" placeholder="Nom, postnom ou prénom" autocomplete="off"
+                       {% if type_liste == 'dossier' %}aria-describedby="dossier-filtre-live-hint"{% endif %}>
             </div>
             <div class="col-md-2">
                 <label class="form-label small fw-bold mb-1">{{ numero_label }}</label>
-                <input type="text" name="numero" class="form-control form-control-sm"
-                       value="{{ filtres.numero }}" placeholder="Recherche partielle">
+                <input type="text" name="numero" class="form-control form-control-sm{% if type_liste == 'dossier' %} dossier-filtre-live{% endif %}"
+                       value="{{ filtres.numero }}" placeholder="Recherche partielle" autocomplete="off">
             </div>
             {% if statut_choices %}
             <div class="col-md-2">
@@ -60,9 +62,13 @@
             Filtres actifs — tous les enregistrements correspondants sont affichés.
         </p>
         {% else %}
-        <p class="small text-muted mb-0 mt-2">
+        <p class="small text-muted mb-0 mt-2" id="{% if type_liste == 'dossier' %}dossier-filtre-live-hint{% endif %}">
             <i class="bi bi-info-circle me-1"></i>
+            {% if type_liste == 'dossier' %}
+            Saisie progressive sur le nom ou le n° dossier (résultats de votre commune en direct).
+            {% else %}
             Par défaut : les {{ limite_defaut }} derniers enregistrements{% if type_liste != 'divorce' %} de votre commune{% endif %}.
+            {% endif %}
         </p>
         {% endif %}
     </div>

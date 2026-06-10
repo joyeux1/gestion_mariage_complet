@@ -1,5 +1,7 @@
 """Filtrage des données par commune selon le rôle de l'utilisateur."""
 
+from django.db.models import Q
+
 from .models import Commune
 
 
@@ -21,11 +23,8 @@ def communes_accessibles(user):
     if acces_toutes_communes(user):
         return Commune.objects.select_related('ville__province').order_by('nom')
     if role == 'MAIRE':
-        if not user.commune_id:
-            return Commune.objects.none()
-        return Commune.objects.filter(
-            ville_id=user.commune.ville_id
-        ).select_related('ville__province').order_by('nom')
+        from .role_permissions import communes_perimetre_maire
+        return communes_perimetre_maire(user)
     if user.commune_id:
         return Commune.objects.filter(pk=user.commune_id).select_related('ville__province')
     return Commune.objects.none()
@@ -34,6 +33,7 @@ def communes_accessibles(user):
 def filtrer_dossiers_par_acces(user, queryset=None):
     """Dossiers limités à la commune / ville / toutes communes selon le rôle."""
     from .models import Dossier
+    from .role_permissions import ville_utilisateur
 
     if queryset is None:
         queryset = Dossier.objects.all()
@@ -41,10 +41,19 @@ def filtrer_dossiers_par_acces(user, queryset=None):
     if acces_toutes_communes(user):
         return queryset
     if role == 'MAIRE':
-        if not user.commune_id:
+        ville = ville_utilisateur(user)
+        if not ville:
             return queryset.none()
-        return queryset.filter(commune_enregistrement__ville_id=user.commune.ville_id)
+        return queryset.filter(commune_enregistrement__ville=ville)
     if user.commune_id:
+        if getattr(user, 'affecte_mairie', False):
+            mairie = Commune.objects.filter(
+                ville=user.commune.ville_id, est_mairie=True
+            ).first()
+            if mairie:
+                return queryset.filter(
+                    Q(commune_enregistrement=user.commune) | Q(commune_enregistrement=mairie)
+                )
         return queryset.filter(commune_enregistrement_id=user.commune_id)
     return queryset.none()
 

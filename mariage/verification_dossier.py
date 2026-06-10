@@ -19,8 +19,6 @@ from .services_biometrie import ReconnaissanceFacialeService
 
 DOSSIER_VERIF_SESSION_KEY = 'dossier_anti_polygamie_verif'
 
-STATUTS_DOSSIER_BLOQUANTS = ('en_cours', 'valide', 'ouvert')
-
 
 def etat_verif_defaut():
     return {
@@ -58,6 +56,19 @@ def reinitialiser_verif(session):
     session.pop(DOSSIER_VERIF_SESSION_KEY, None)
 
 
+def reinitialiser_epoux_verif(session):
+    """Annule uniquement la validation de l'époux (étape 1) pour permettre une nouvelle saisie."""
+    etat = lire_etat_verif(session)
+    etat['epoux_ok'] = False
+    etat['identite_epoux'] = {}
+    etat['empreinte_epoux'] = ''
+    etat['empreinte_b64_epoux'] = ''
+    etat['empreinte_nom_epoux'] = ''
+    etat['photo_b64_epoux'] = ''
+    sauver_etat_verif(session, etat)
+    return etat
+
+
 def verif_complete(etat):
     return bool(etat.get('epoux_ok') and etat.get('epouse_ok'))
 
@@ -69,38 +80,26 @@ def _url_image(champ_image):
 
 
 def _mariage_actif_pour_conjoint(conjoint, est_epoux):
+    """Mariage avec acte produit encore en vigueur (non divorcé)."""
     if not conjoint:
         return None
     if est_epoux:
         return (
             Mariage.objects.filter(epoux=conjoint, statut='actif')
-            .select_related('dossier', 'epouse', 'epoux')
+            .exclude(numero_acte='')
+            .select_related('dossier__commune_enregistrement', 'epouse', 'epoux')
             .first()
         )
     return (
         Mariage.objects.filter(epouse=conjoint, statut='actif')
-        .select_related('dossier', 'epoux', 'epouse')
+        .exclude(numero_acte='')
+        .select_related('dossier__commune_enregistrement', 'epoux', 'epouse')
         .first()
     )
 
 
-def _dossier_bloquant_pour_conjoint(conjoint, est_epoux):
-    """Dossier en cours / validé / ouvert sans divorce sur le mariage lié."""
-    if not conjoint:
-        return None
-    if est_epoux:
-        qs = Dossier.objects.filter(epoux=conjoint, statut__in=STATUTS_DOSSIER_BLOQUANTS)
-    else:
-        qs = Dossier.objects.filter(epouse=conjoint, statut__in=STATUTS_DOSSIER_BLOQUANTS)
-    for dossier in qs.select_related('epoux', 'epouse'):
-        mariage = Mariage.objects.filter(dossier=dossier).first()
-        if mariage and mariage.statut == 'divorce':
-            continue
-        if mariage and mariage.statut == 'actif':
-            return dossier, mariage
-        if not mariage:
-            return dossier, None
-    return None
+def _conjoint_a_mariage_actif(conjoint, est_epoux):
+    return _mariage_actif_pour_conjoint(conjoint, est_epoux) is not None
 
 
 def _post_nom_conjoint(conjoint):
@@ -162,29 +161,20 @@ def serialiser_personne_blocante(conjoint, est_epoux, mariage=None, dossier=None
     return data
 
 
-def _message_blocage(conjoint, est_epoux, mariage, dossier, role_label):
+def _message_blocage(conjoint, est_epoux, mariage, role_label):
     post_nom = _post_nom_conjoint(conjoint)
     identite = f"{conjoint.nom} {post_nom} {conjoint.prenom}".strip()
-    if mariage and mariage.statut == 'actif':
-        return (
-            f"⛔ {role_label} — {identite} possède encore un mariage actif "
-            f"(Acte N° {mariage.numero_acte}). Cette personne doit d'abord divorcer "
-            f"avant de pouvoir se remarier. Ouverture de dossier refusée."
-        )
-    if dossier:
-        return (
-            f"ALERTE — {role_label} : {identite} est déjà enregistré(e) dans le système "
-            f"(Dossier N° {dossier.numero_dossier}, statut : {dossier.get_statut_display()}). "
-            f"Ouverture refusée."
-        )
-    return f"ALERTE — {role_label} : {identite} ne peut pas ouvrir un nouveau dossier."
+    return (
+        f"⛔ {role_label} — {identite} possède encore un mariage actif "
+        f"(Acte N° {mariage.numero_acte}). Cette personne doit d'abord divorcer "
+        f"avant de pouvoir se remarier. Ouverture de dossier refusée."
+    )
 
 
 def evaluer_conjoint_enregistre(conjoint, est_epoux, role_label):
     """
-    Évalue une personne déjà en base.
-    Retourne None si la vérification peut passer (divorcé, jamais marié activement, etc.).
-    Retourne dict {ok: False, message, match} si bloqué.
+    Bloque uniquement si la personne figure sur un acte de mariage encore actif
+    (union validée, non divorcée). Les dossiers non actés ou les divorces ne bloquent pas.
     """
     if not conjoint:
         return None
@@ -193,40 +183,38 @@ def evaluer_conjoint_enregistre(conjoint, est_epoux, role_label):
     if mariage:
         return {
             'ok': False,
-            'message': _message_blocage(conjoint, est_epoux, mariage, mariage.dossier, role_label),
+            'message': _message_blocage(conjoint, est_epoux, mariage, role_label),
             'match': serialiser_personne_blocante(conjoint, est_epoux, mariage=mariage),
-        }
-
-    dossier_info = _dossier_bloquant_pour_conjoint(conjoint, est_epoux)
-    if dossier_info:
-        dossier, mariage_lie = dossier_info
-        if mariage_lie and mariage_lie.statut == 'actif':
-            return {
-                'ok': False,
-                'message': _message_blocage(conjoint, est_epoux, mariage_lie, dossier, role_label),
-                'match': serialiser_personne_blocante(
-                    conjoint, est_epoux, mariage=mariage_lie, dossier=dossier
-                ),
-            }
-        return {
-            'ok': False,
-            'message': _message_blocage(conjoint, est_epoux, None, dossier, role_label),
-            'match': serialiser_personne_blocante(conjoint, est_epoux, dossier=dossier),
         }
 
     return None
 
 
-def _catalogue_encodages_faciaux():
+def _catalogue_encodages_faciaux(role):
+    """Visages des personnes ayant un acte de mariage encore actif (selon le rôle vérifié)."""
     candidats = []
-    for epoux in Epoux.objects.select_related('reconnaissance_faciale').iterator():
-        enc = _encodage_facial_conjoint(epoux)
-        if enc is not None:
-            candidats.append({'conjoint': epoux, 'est_epoux': True, 'encodage': enc})
-    for epouse in Epouse.objects.select_related('reconnaissance_faciale').iterator():
-        enc = _encodage_facial_conjoint(epouse)
-        if enc is not None:
-            candidats.append({'conjoint': epouse, 'est_epoux': False, 'encodage': enc})
+    if role == 'epoux':
+        qs = (
+            Epoux.objects.filter(mariage__statut='actif')
+            .exclude(mariage__numero_acte='')
+            .distinct()
+            .select_related('reconnaissance_faciale')
+        )
+        for epoux in qs.iterator():
+            enc = _encodage_facial_conjoint(epoux)
+            if enc is not None:
+                candidats.append({'conjoint': epoux, 'est_epoux': True, 'encodage': enc})
+    elif role == 'epouse':
+        qs = (
+            Epouse.objects.filter(mariage__statut='actif')
+            .exclude(mariage__numero_acte='')
+            .distinct()
+            .select_related('reconnaissance_faciale')
+        )
+        for epouse in qs.iterator():
+            enc = _encodage_facial_conjoint(epouse)
+            if enc is not None:
+                candidats.append({'conjoint': epouse, 'est_epoux': False, 'encodage': enc})
     return candidats
 
 
@@ -246,8 +234,11 @@ def _encodage_facial_conjoint(conjoint):
         return None
 
 
-def _trouver_conjoints_par_empreinte(fichier):
-    """Recherche par empreinte sur toute la base (toutes communes)."""
+def _trouver_conjoints_par_empreinte(fichier, role):
+    """
+    Recherche par empreinte : ne retient que les personnes avec un acte de mariage actif
+    (table Epoux pour role=epoux, table Epouse pour role=epouse).
+    """
     fichier.seek(0)
     contenu = fichier.read()
     fichier.seek(0)
@@ -280,12 +271,16 @@ def _trouver_conjoints_par_empreinte(fichier):
         if not correspond:
             continue
         empreintes_vues.add(empreinte.pk)
-        epoux = Epoux.objects.filter(empreinte_digitale=empreinte).first()
-        if epoux:
-            trouves.append((epoux, True))
-        epouse = Epouse.objects.filter(empreinte_digitale=empreinte).first()
-        if epouse:
-            trouves.append((epouse, False))
+
+        if role == 'epoux':
+            epoux = Epoux.objects.filter(empreinte_digitale=empreinte).first()
+            if epoux and _conjoint_a_mariage_actif(epoux, True):
+                trouves.append((epoux, True))
+        elif role == 'epouse':
+            epouse = Epouse.objects.filter(empreinte_digitale=empreinte).first()
+            if epouse and _conjoint_a_mariage_actif(epouse, False):
+                trouves.append((epouse, False))
+
     return trouves
 
 
@@ -295,12 +290,15 @@ def verifier_empreinte(role, fichier):
         raise ValidationError(f"Scan d'empreinte requis pour le {role_label.lower()}.")
 
     nom_fichier = fichier.name
-    conjoints = _trouver_conjoints_par_empreinte(fichier)
+    conjoints = _trouver_conjoints_par_empreinte(fichier, role)
 
     if not conjoints:
         return {
             'ok': True,
-            'message': f"{role_label} vérifié — personne non reconnue dans le système (aucun antécédent bloquant).",
+            'message': (
+                f"{role_label} vérifié — aucun acte de mariage actif associé à cette empreinte "
+                f"(personne libre de se marier ou empreinte inconnue)."
+            ),
             'empreinte_nom': nom_fichier,
         }
 
@@ -313,8 +311,8 @@ def verifier_empreinte(role, fichier):
     return {
         'ok': True,
         'message': (
-            f"{role_label} vérifié — personne reconnue mais sans mariage actif ni dossier bloquant "
-            f"(divorcé(e) ou jamais marié(e) activement)."
+            f"{role_label} vérifié — empreinte reconnue sans union active enregistrée "
+            f"(mariage divorcé ou sans acte en vigueur)."
         ),
         'empreinte_nom': nom_fichier,
     }
@@ -369,6 +367,63 @@ def verifier_nominatif(role, nom, postnom, prenom):
     }
 
 
+def verifier_nominatif_selection(role, personne_id, est_epoux, est_profil_citoyen=False):
+    """Vérification après sélection dans la liste nominative."""
+    from .models import Epouse, Epoux, ProfilCitoyen
+
+    role_label = 'Futur époux' if role == 'epoux' else 'Future épouse'
+
+    if est_profil_citoyen:
+        profil = ProfilCitoyen.objects.filter(pk=personne_id).first()
+        if not profil:
+            raise ValidationError('Personne introuvable dans les profils citoyens.')
+        identite = {
+            'nom': profil.nom,
+            'postnom': profil.post_nom or '',
+            'prenom': profil.prenom or '',
+            'numero_piece': profil.numero_piece or '',
+            'profil_citoyen_id': profil.pk,
+        }
+        return {
+            'ok': True,
+            'message': (
+                f"{role_label} vérifié — profil citoyen « {profil.nom} {profil.prenom} » "
+                f"(données préenregistrées pour le jour du mariage)."
+            ),
+            'identite': identite,
+        }
+
+    if est_epoux:
+        conjoint = Epoux.objects.filter(pk=personne_id).first()
+    else:
+        conjoint = Epouse.objects.filter(pk=personne_id).first()
+
+    if not conjoint:
+        raise ValidationError('Personne introuvable. Choisissez une entrée dans la liste.')
+
+    post_nom = _post_nom_conjoint(conjoint)
+    identite = {
+        'nom': conjoint.nom,
+        'postnom': post_nom,
+        'prenom': conjoint.prenom or '',
+        'numero_piece': conjoint.numero_piece or '',
+    }
+
+    blocage = evaluer_conjoint_enregistre(conjoint, est_epoux, role_label)
+    if blocage:
+        blocage['identite'] = identite
+        return blocage
+
+    return {
+        'ok': True,
+        'message': (
+            f"{role_label} vérifié — {conjoint.nom} {post_nom} "
+            f"(identité connue, sans mariage actif)."
+        ),
+        'identite': identite,
+    }
+
+
 def verifier_facial(role, image_base64):
     role_label = 'Futur époux' if role == 'epoux' else 'Future épouse'
     if not image_base64:
@@ -390,7 +445,7 @@ def verifier_facial(role, image_base64):
         raise ValidationError('Image faciale invalide.') from exc
 
     catalogue = []
-    for item in _catalogue_encodages_faciaux():
+    for item in _catalogue_encodages_faciaux(role):
         catalogue.append({
             'id': item['conjoint'].pk,
             'encodage': item['encodage'],
@@ -400,7 +455,10 @@ def verifier_facial(role, image_base64):
     if not catalogue:
         return {
             'ok': True,
-            'message': f"{role_label} vérifié — visage inconnu du système (aucun antécédent bloquant).",
+            'message': (
+                f"{role_label} vérifié — aucun visage d'union active enregistré "
+                f"dans le système (aucun acte de mariage actif à comparer)."
+            ),
             'photo_base64': original_b64,
         }
 
@@ -435,14 +493,17 @@ def verifier_facial(role, image_base64):
             'ok': True,
             'message': (
                 f"{role_label} vérifié — visage reconnu (confiance {confiance} %) "
-                f"sans mariage actif ni dossier bloquant."
+                f"sans acte de mariage actif."
             ),
             'photo_base64': original_b64,
         }
 
     return {
         'ok': True,
-        'message': f"{role_label} vérifié — visage non reconnu ; aucun antécédent bloquant.",
+        'message': (
+            f"{role_label} vérifié — visage non reconnu parmi les unions actives ; "
+            f"aucun acte de mariage en vigueur détecté."
+        ),
         'photo_base64': original_b64,
     }
 

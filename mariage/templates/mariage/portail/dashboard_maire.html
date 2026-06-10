@@ -1,0 +1,59 @@
+{% extends 'mariage/base.html' %}
+{% block title %}Tableau de bord — Mairie{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold"><i class="bi bi-building me-2"></i> Espace Mairie{% if ville %} — {{ ville.nom }}{% endif %}</h2>
+        <p class="text-muted mb-0">Communes de la ville + mariages célébrés à la mairie</p>
+    </div>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase small">Dossiers (ville)</h6>
+                <h2 class="fw-bold text-primary">{{ nb_dossiers_ville }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase small">Mariages (ville)</h6>
+                <h2 class="fw-bold text-danger">{{ nb_mariages_ville }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm bg-warning bg-opacity-10">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase small">Mariages à la Mairie</h6>
+                <h2 class="fw-bold">{{ nb_mariages_mairie }}</h2>
+                {% if mairie %}<small class="text-muted">{{ mairie.nom }}</small>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-bold">Communes de la ville</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light"><tr><th class="ps-4">Commune</th><th>Type</th><th>Actions</th></tr></thead>
+            <tbody>
+                {% for c in communes %}
+                <tr>
+                    <td class="ps-4 fw-semibold">{{ c.nom }}</td>
+                    <td>{% if c.est_mairie %}<span class="badge bg-warning text-dark">Mairie</span>{% else %}Commune{% endif %}</td>
+                    <td>
+                        <a href="{% url 'dossier_list' %}?commune={{ c.pk }}" class="btn btn-sm btn-outline-primary">Dossiers</a>
+                        <a href="{% url 'bourgmestre_dashboard' %}?commune={{ c.pk }}" class="btn btn-sm btn-outline-warning">Caisse</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="text-center py-4 text-muted">Aucune commune configurée pour cette ville.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

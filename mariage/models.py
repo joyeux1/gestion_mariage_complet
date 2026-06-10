@@ -46,9 +46,19 @@ class Ville(models.Model):
 class Commune(models.Model):
     code_postal_de_la_commune = models.CharField(max_length=100)
     nom = models.CharField(max_length=100)
-    ville = models.ForeignKey(Ville, on_delete=models.CASCADE)  # Assurez-vous que c'est bien écrit ainsi
-    
+    ville = models.ForeignKey(Ville, on_delete=models.CASCADE)
+    est_mairie = models.BooleanField(
+        default=False,
+        help_text="Commune virtuelle « Mairie » pour les mariages célébrés à l'hôtel de ville.",
+    )
+
+    class Meta:
+        verbose_name = 'Commune'
+        verbose_name_plural = 'Communes'
+
     def __str__(self):
+        if self.est_mairie:
+            return f"Mairie de {self.ville.nom}"
         return f"{self.nom} ({self.ville.nom})"
 
 # ==========================================================
@@ -67,8 +77,27 @@ class Utilisateur(AbstractUser):
 
     telephone = models.CharField(max_length=20, blank=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
-    # null=True ajouté pour permettre la création du premier superuser via console
-    commune = models.ForeignKey(Commune, on_delete=models.CASCADE, null=True, blank=True)
+    commune = models.ForeignKey(
+        Commune, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='agents',
+    )
+    ville = models.ForeignKey(
+        'Ville', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='maires',
+        help_text="Ville d'affectation pour le maire (accès à toutes les communes + mairie).",
+    )
+    epoux_lie = models.ForeignKey(
+        'Epoux', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='comptes_conjoint',
+    )
+    epouse_lie = models.ForeignKey(
+        'Epouse', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='comptes_conjoint',
+    )
+    affecte_mairie = models.BooleanField(
+        default=False,
+        help_text="Agent affecté à la mairie (mariages célébrés à l'hôtel de ville).",
+    )
 
     class Meta:
         verbose_name = "Utilisateur"
@@ -246,7 +275,11 @@ class Dossier(models.Model):
     statut = models.CharField(max_length=20, choices=STATUS_CHOICES, default='en_attente')
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
     date_creation = models.DateTimeField(auto_now_add=True)
-    date_mise_a_jour = models.DateTimeField(auto_now=True) # CORRIGÉ : auto_now pour la mise à jour
+    date_mise_a_jour = models.DateTimeField(auto_now=True)
+    celebre_a_mairie = models.BooleanField(
+        default=False,
+        help_text="Mariage célébré à la mairie (hôtel de ville) plutôt qu'en commune.",
+    )
 
     def __str__(self):
         return self.numero_dossier
@@ -399,3 +432,58 @@ class Divorce(models.Model):
 
     def __str__(self):
         return self.numero_divorce
+
+
+# ==========================
+# PROFIL CITOYEN (pré-enregistrement)
+# ==========================
+class ProfilCitoyen(models.Model):
+    SEXE_CHOICES = [('M', 'Masculin'), ('F', 'Féminin')]
+
+    utilisateur = models.OneToOneField(
+        Utilisateur, on_delete=models.CASCADE, related_name='profil_citoyen',
+    )
+    nom = models.CharField(max_length=100)
+    post_nom = models.CharField(max_length=100, blank=True)
+    prenom = models.CharField(max_length=100, blank=True)
+    telephone = models.CharField(max_length=20, blank=True)
+    numero_piece = models.CharField(max_length=50, blank=True)
+    date_naissance = models.DateField(null=True, blank=True)
+    lieu_naissance = models.CharField(max_length=150, blank=True)
+    sexe = models.CharField(max_length=1, choices=SEXE_CHOICES, blank=True)
+    nationalite = models.CharField(max_length=100, default='Congolaise')
+    profession = models.CharField(max_length=100, blank=True)
+    photo = models.ImageField(upload_to='citoyens/photos/', blank=True, null=True)
+    date_mise_a_jour = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.nom} {self.post_nom} {self.prenom}".strip()
+
+
+# ==========================
+# CAPTURE MOBILE (téléphone / empreinte)
+# ==========================
+class SessionCaptureMobile(models.Model):
+    TYPE_CAPTURE = [
+        ('empreinte', 'Empreinte digitale'),
+        ('photo', 'Photo / reconnaissance faciale'),
+    ]
+    CONTEXTE_CHOICES = [
+        ('dossier_verif', 'Vérification dossier'),
+        ('mariage', 'Mariage'),
+        ('divorce', 'Divorce'),
+    ]
+
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    agent = models.ForeignKey(Utilisateur, on_delete=models.CASCADE, related_name='sessions_capture')
+    type_capture = models.CharField(max_length=20, choices=TYPE_CAPTURE)
+    role_verif = models.CharField(max_length=10, blank=True)
+    contexte = models.CharField(max_length=30, choices=CONTEXTE_CHOICES, default='dossier_verif')
+    fichier = models.FileField(upload_to='capture_mobile/', blank=True, null=True)
+    image_base64 = models.TextField(blank=True)
+    consomme = models.BooleanField(default=False)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_expiration = models.DateTimeField()
+
+    def __str__(self):
+        return f"Capture {self.token[:8]}… ({self.type_capture})"

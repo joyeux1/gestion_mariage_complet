@@ -81,9 +81,6 @@
                         <option value="ouvert" selected>Ouvert</option>
                         {% endif %}
                     </select>
-                    <label class="form-label fw-bold small mt-2">Date dépôt</label>
-                    <input type="date" name="date_depot" class="form-control form-control-sm" form="form-dossier-edit"
-                           value="{{ dossier.date_depot|date:'Y-m-d' }}">
                     <label class="form-label fw-bold small mt-2">Objet</label>
                     <input type="text" name="objet" class="form-control form-control-sm" form="form-dossier-edit"
                            value="{{ dossier.objet|default:'mariage civil' }}">
@@ -95,27 +92,41 @@
 
     {% if etape_biometrie and not is_edit %}
     <div class="card shadow border-0 col-lg-10 mx-auto mb-4" id="dossier-verif-container"
-         data-verif-url="{% url 'dossier_verifier_conjoint' %}">
-        <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+         data-verif-url="{% url 'dossier_verifier_conjoint' %}"
+         data-recherche-url="{% url 'recherche_nominative' %}"
+         data-capture-create-url="{% url 'mobile_capture_creer' %}"
+         data-tunnel-url="{% url 'mobile_capture_tunnel' %}">
+        <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span><i class="bi bi-shield-exclamation me-2 text-warning"></i> Vérification anti-polygamie (obligatoire)</span>
-            <span class="badge bg-warning text-dark" id="verif-progress-badge">Étape 1/2 — Futur époux</span>
+            <div class="d-flex align-items-center gap-2">
+                <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <button type="submit" name="reinitialiser_verification" class="btn btn-sm btn-outline-warning"
+                            title="Effacer la vérification en cours et recommencer">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                </form>
+                <span class="badge bg-warning text-dark" id="verif-progress-badge">Étape 1/2 — Futur époux</span>
+            </div>
         </div>
         <div class="card-body">
             <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
             <p class="text-muted small mb-3">
-                <strong>Procédure stricte :</strong> choisissez un mode de vérification, validez d'abord le <strong>futur époux</strong>,
-                puis la <strong>future épouse</strong>. Tant que les deux contrôles ne sont pas réussis, la saisie du dossier reste bloquée.
+                <strong>Procédure stricte (2 étapes) :</strong>
+                <strong>① Futur époux</strong> d'abord, puis <strong>② Future épouse</strong>.
+                Si l'un des deux figure sur un <strong>acte de mariage encore actif</strong> (non divorcé), l'ouverture du dossier est refusée.
+                Lorsque les <strong>deux</strong> sont validés sans mariage actif, le <strong>formulaire d'enregistrement</strong> s'ouvre automatiquement.
             </p>
 
             <ul class="nav nav-pills nav-justified mb-3" id="dossierVerifTabs" role="tablist">
                 <li class="nav-item">
-                    <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#verif-empreinte" type="button">
-                        <i class="bi bi-fingerprint me-1"></i> 1. Empreintes
+                    <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#verif-nominative" type="button">
+                        <i class="bi bi-person-text me-1"></i> 1. Nominative
                     </button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#verif-nominative" type="button">
-                        <i class="bi bi-person-text me-1"></i> 2. Nominative
+                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#verif-empreinte" type="button">
+                        <i class="bi bi-fingerprint me-1"></i> 2. Empreintes
                     </button>
                 </li>
                 <li class="nav-item">
@@ -126,8 +137,70 @@
             </ul>
 
             <div class="tab-content border rounded bg-light p-4">
+                <!-- NOMINATIVE (1er onglet) -->
+                <div class="tab-pane fade show active" id="verif-nominative">
+                    <p class="small text-muted mb-3">
+                        <strong>Étape 1 :</strong> vérifiez l'époux. <strong>Étape 2 :</strong> l'épouse (débloquée après validation de l'époux).
+                        La liste n'affiche que les personnes déjà mariées (acte actif) : leur sélection <strong>bloque</strong> le dossier.
+                        Si le nom ne figure sur aucun acte actif, la validation continue et le formulaire s'ouvrira après les deux étapes.
+                    </p>
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-primary border-opacity-50" id="verif-nom-epoux-card">
+                                <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                    <i class="bi bi-1-circle me-1"></i> Futur époux
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label small fw-bold">Mot-clé (nom, postnom ou prénom)</label>
+                                    <div class="verif-nom-saisie-wrap position-relative">
+                                        <input type="text" class="form-control form-control-sm mb-0" id="recherche-epoux"
+                                               placeholder="Ex: KASEREKA, MBUSA, Joyeux…" autocomplete="off">
+                                        <div class="list-group list-group-flush small verif-nom-propositions d-none"
+                                             id="resultats-epoux"
+                                             style="max-height:320px;overflow:auto;border:1px solid #dee2e6;border-radius:0.375rem;box-shadow:0 0.35rem 0.75rem rgba(0,0,0,.08);background:#fff;margin-top:0.35rem;"></div>
+                                    </div>
+                                    <input type="hidden" id="selection-epoux-id">
+                                    <input type="hidden" id="selection-epoux-est-epoux" value="1">
+                                    <input type="hidden" id="selection-epoux-profil" value="0">
+                                    <p class="small text-muted mb-0 mt-2" id="selection-epoux-label">
+                                        Saisissez le nom complet : si aucun acte actif n'est trouvé, l'époux peut se marier et le système passe à l'épouse.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-nom-epouse-card">
+                                <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                    <i class="bi bi-2-circle me-1"></i> Future épouse
+                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label small fw-bold">Mot-clé (nom, postnom ou prénom)</label>
+                                    <div class="verif-nom-saisie-wrap position-relative">
+                                        <input type="text" class="form-control form-control-sm mb-0" id="recherche-epouse"
+                                               placeholder="Ex: KAVIRA, MASIKA, Alliance…" disabled autocomplete="off">
+                                        <div class="list-group list-group-flush small verif-nom-propositions d-none"
+                                             id="resultats-epouse"
+                                             style="max-height:320px;overflow:auto;border:1px solid #dee2e6;border-radius:0.375rem;box-shadow:0 0.35rem 0.75rem rgba(0,0,0,.08);background:#fff;margin-top:0.35rem;"></div>
+                                    </div>
+                                    <input type="hidden" id="selection-epouse-id">
+                                    <input type="hidden" id="selection-epouse-est-epoux" value="0">
+                                    <input type="hidden" id="selection-epouse-profil" value="0">
+                                    <p class="small text-muted mb-0 mt-2" id="selection-epouse-label">Disponible après validation de l'époux — même contrôle automatique pour l'épouse.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- EMPREINTE -->
-                <div class="tab-pane fade show active" id="verif-empreinte">
+                <div class="tab-pane fade" id="verif-empreinte">
+                    <div id="tunnel-empreinte-status" class="alert alert-info small mb-3 d-none" role="status"></div>
+                    <p class="small text-muted mb-3">
+                        Comparaison nationale : l'empreinte n'est retenue que si elle appartient à une personne
+                        figurant sur un <strong>acte de mariage actif</strong> (époux ou épouse selon le bloc vérifié).
+                    </p>
                     <div class="row g-4">
                         <div class="col-md-6" id="verif-empreinte-epoux-block">
                             <div class="card h-100 border-primary border-opacity-50">
@@ -138,6 +211,16 @@
                                 <div class="card-body">
                                     <label class="form-label small fw-bold">Scan d'empreinte digitale</label>
                                     <input type="file" class="form-control form-control-sm" id="empreinte-epoux-file" accept="image/*,.bmp,.png,.jpg,.jpeg">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100 btn-mobile-capture"
+                                            data-type-capture="empreinte" data-role="epoux">
+                                        <i class="bi bi-phone me-1"></i> Capturer depuis le téléphone
+                                    </button>
+                                    <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mt-2 mx-auto"
+                                         id="mobile-qr-empreinte-epoux" style="width:120px;height:120px;"
+                                         title="Scannez pour ouvrir la capture sur le téléphone">
+                                        <span class="small text-muted text-center px-1">QR code</span>
+                                    </div>
+                                    <div class="small text-muted mt-1 mobile-capture-status" id="mobile-status-empreinte-epoux"></div>
                                     <button type="button" class="btn btn-primary btn-sm mt-3 w-100 btn-verif-conjoint"
                                             data-type="empreinte" data-role="epoux">
                                         <i class="bi bi-shield-check me-1"></i> Vérifier l'époux
@@ -154,6 +237,16 @@
                                 <div class="card-body">
                                     <label class="form-label small fw-bold">Scan d'empreinte digitale</label>
                                     <input type="file" class="form-control form-control-sm" id="empreinte-epouse-file" accept="image/*,.bmp,.png,.jpg,.jpeg" disabled>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100 btn-mobile-capture" disabled
+                                            data-type-capture="empreinte" data-role="epouse">
+                                        <i class="bi bi-phone me-1"></i> Capturer depuis le téléphone
+                                    </button>
+                                    <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mt-2 mx-auto opacity-50"
+                                         id="mobile-qr-empreinte-epouse" style="width:120px;height:120px;"
+                                         title="Scannez pour ouvrir la capture sur le téléphone">
+                                        <span class="small text-muted text-center px-1">QR code</span>
+                                    </div>
+                                    <div class="small text-muted mt-1 mobile-capture-status" id="mobile-status-empreinte-epouse"></div>
                                     <button type="button" class="btn btn-danger btn-sm mt-3 w-100 btn-verif-conjoint" disabled
                                             data-type="empreinte" data-role="epouse">
                                         <i class="bi bi-shield-check me-1"></i> Vérifier l'épouse
@@ -165,48 +258,13 @@
                     </div>
                 </div>
 
-                <!-- NOMINATIVE -->
-                <div class="tab-pane fade" id="verif-nominative">
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <div class="card h-100 border-primary border-opacity-50" id="verif-nom-epoux-card">
-                                <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
-                                    <i class="bi bi-1-circle me-1"></i> Futur époux
-                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
-                                </div>
-                                <div class="card-body">
-                                    <input type="text" class="form-control form-control-sm mb-2" id="nom-epoux" placeholder="Nom *">
-                                    <input type="text" class="form-control form-control-sm mb-2" id="postnom-epoux" placeholder="Postnom">
-                                    <input type="text" class="form-control form-control-sm mb-2" id="prenom-epoux" placeholder="Prénom">
-                                    <button type="button" class="btn btn-primary btn-sm w-100 btn-verif-conjoint"
-                                            data-type="nominative" data-role="epoux">
-                                        <i class="bi bi-search me-1"></i> Vérifier l'époux
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-nom-epouse-card">
-                                <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
-                                    <i class="bi bi-2-circle me-1"></i> Future épouse
-                                    <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
-                                </div>
-                                <div class="card-body">
-                                    <input type="text" class="form-control form-control-sm mb-2" id="nom-epouse" placeholder="Nom *" disabled>
-                                    <input type="text" class="form-control form-control-sm mb-2" id="postnom-epouse" placeholder="Postnom" disabled>
-                                    <input type="text" class="form-control form-control-sm mb-2" id="prenom-epouse" placeholder="Prénom" disabled>
-                                    <button type="button" class="btn btn-danger btn-sm w-100 btn-verif-conjoint" disabled
-                                            data-type="nominative" data-role="epouse">
-                                        <i class="bi bi-search me-1"></i> Vérifier l'épouse
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- FACIALE -->
                 <div class="tab-pane fade" id="verif-faciale">
+                    <div id="tunnel-faciale-status" class="alert alert-info small mb-3 d-none" role="status"></div>
+                    <p class="small text-muted mb-3">
+                        Le visage capturé est comparé uniquement aux personnes ayant un
+                        <strong>acte de mariage encore valide</strong> (union active, non divorcée).
+                    </p>
                     <div class="row g-4">
                         <div class="col-md-6">
                             <div class="card h-100 border-primary border-opacity-50" id="verif-face-epoux-card">
@@ -225,6 +283,16 @@
                                     <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="dossier-capture-epoux-btn" disabled>
                                         <i class="bi bi-camera me-1"></i> Capturer depuis webcam
                                     </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mb-2 w-100 btn-mobile-capture"
+                                            data-type-capture="photo" data-role="epoux">
+                                        <i class="bi bi-phone me-1"></i> Photo depuis le téléphone
+                                    </button>
+                                    <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mb-2 mx-auto"
+                                         id="mobile-qr-photo-epoux" style="width:120px;height:120px;"
+                                         title="Scannez pour ouvrir la capture sur le téléphone">
+                                        <span class="small text-muted text-center px-1">QR code</span>
+                                    </div>
+                                    <div class="small text-muted mb-2 mobile-capture-status" id="mobile-status-photo-epoux"></div>
                                     <button type="button" class="btn btn-primary btn-sm w-100 btn-verif-conjoint"
                                             data-type="faciale" data-role="epoux" id="dossier-verif-face-epoux-btn">
                                         <i class="bi bi-person-bounding-box me-1"></i> Vérifier l'époux
@@ -249,6 +317,16 @@
                                     <button type="button" class="btn btn-outline-danger btn-sm mb-2" id="dossier-capture-epouse-btn" disabled>
                                         <i class="bi bi-camera me-1"></i> Capturer depuis webcam
                                     </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mb-2 w-100 btn-mobile-capture" disabled
+                                            data-type-capture="photo" data-role="epouse">
+                                        <i class="bi bi-phone me-1"></i> Photo depuis le téléphone
+                                    </button>
+                                    <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mb-2 mx-auto opacity-50"
+                                         id="mobile-qr-photo-epouse" style="width:120px;height:120px;"
+                                         title="Scannez pour ouvrir la capture sur le téléphone">
+                                        <span class="small text-muted text-center px-1">QR code</span>
+                                    </div>
+                                    <div class="small text-muted mb-2 mobile-capture-status" id="mobile-status-photo-epouse"></div>
                                     <button type="button" class="btn btn-danger btn-sm w-100 btn-verif-conjoint" disabled
                                             data-type="faciale" data-role="epouse" id="dossier-verif-face-epouse-btn">
                                         <i class="bi bi-person-bounding-box me-1"></i> Vérifier l'épouse
@@ -262,6 +340,21 @@
 
             <div id="verif-alert-zone" class="mt-3"></div>
             <div id="verif-match-zone" class="mt-3"></div>
+
+            <div class="modal fade" id="modalPhotoNomVerif" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content border-0 shadow-lg">
+                        <div class="modal-header border-0 pb-0">
+                            <h5 class="modal-title fw-bold" id="modalPhotoNomVerifLabel">Photo</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                        </div>
+                        <div class="modal-body text-center pt-2 pb-4 px-4">
+                            <img id="modalPhotoNomVerifImg" src="" alt="" class="img-fluid rounded shadow-sm"
+                                 style="max-height:75vh;width:auto;max-width:100%;object-fit:contain;">
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -300,6 +393,17 @@
                         <i class="bi bi-person-fill me-2"></i> BLOC 1 : Identité du Futur Époux
                     </div>
                     <div class="card-body py-2">
+                        <div class="mb-3 pb-2 border-bottom border-primary border-opacity-25">
+                            <label class="form-label lh-1 small fw-bold text-primary mb-1" style="font-size: 0.8rem;">
+                                <i class="bi bi-calendar-event me-1"></i> Jour et date de dépôt du dossier *
+                            </label>
+                            <input type="date" name="date_depot" class="form-control form-control-sm fw-semibold" required
+                                   max="{% now 'Y-m-d' %}"
+                                   value="{% if is_edit and dossier.date_depot %}{{ dossier.date_depot|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}">
+                            <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                Date réelle du dépôt du dossier au guichet (la saisie informatique peut intervenir plus tard).
+                            </small>
+                        </div>
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="form-label lh-1 small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Nom *</label>
@@ -349,8 +453,9 @@
                         </div>
                         {% endif %}
 
-                        <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-primary" style="font-size: 0.8rem;" type="button" data-bs-toggle="modal" data-bs-target="#modalEpoux">
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-primary" style="font-size: 0.8rem;" type="button" id="btn-open-modal-epoux" data-bs-toggle="modal" data-bs-target="#modalEpoux">
                             <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                            <span id="badge-complement-epoux" class="badge bg-success ms-1 d-none">Validé</span>
                         </button>
                     </div>
                 </div>
@@ -411,8 +516,9 @@
                         </div>
                         {% endif %}
 
-                        <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-danger" style="font-size: 0.8rem;" type="button" data-bs-toggle="modal" data-bs-target="#modalEpouse">
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold text-danger" style="font-size: 0.8rem;" type="button" id="btn-open-modal-epouse" data-bs-toggle="modal" data-bs-target="#modalEpouse">
                             <i class="bi bi-plus-circle me-1"></i> Ajouter plus de détails
+                            <span id="badge-complement-epouse" class="badge bg-success ms-1 d-none">Validé</span>
                         </button>
                     </div>
                 </div>
@@ -606,12 +712,19 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Photo d'Identité (Profil)</label>
-                                <input type="file" name="e_photo" class="form-control form-control-sm">
+                                <input type="file" id="e_photo_modal" class="form-control form-control-sm" accept="image/*">
+                                <small class="text-muted">Sera reprise sur la photo principale du bloc époux.</small>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer py-1 bg-light">
-                        <button type="button" class="btn btn-sm btn-primary px-4 fw-bold" data-bs-dismiss="modal">Fermer</button>
+                    <div class="modal-footer py-2 bg-light flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
+                        <span id="modal-epoux-validation-msg" class="small text-success d-none flex-grow-1"></span>
+                        <div class="d-flex gap-2 ms-sm-auto">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal">Fermer</button>
+                            <button type="button" class="btn btn-sm btn-success px-4 fw-bold" id="btn-valider-complement-epoux">
+                                <i class="bi bi-check-lg me-1"></i> Valider le complément
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -695,12 +808,19 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold text-muted mb-1">Photo d'Identité (Profil)</label>
-                                <input type="file" name="f_photo" class="form-control form-control-sm">
+                                <input type="file" id="f_photo_modal" class="form-control form-control-sm" accept="image/*">
+                                <small class="text-muted">Sera reprise sur la photo principale du bloc épouse.</small>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer py-1 bg-light">
-                        <button type="button" class="btn btn-sm btn-danger px-4 fw-bold" data-bs-dismiss="modal">Fermer</button>
+                    <div class="modal-footer py-2 bg-light flex-column flex-sm-row align-items-stretch align-items-sm-center gap-2">
+                        <span id="modal-epouse-validation-msg" class="small text-success d-none flex-grow-1"></span>
+                        <div class="d-flex gap-2 ms-sm-auto">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal">Fermer</button>
+                            <button type="button" class="btn btn-sm btn-success px-4 fw-bold" id="btn-valider-complement-epouse">
+                                <i class="bi bi-check-lg me-1"></i> Valider le complément
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -717,8 +837,14 @@
 
 {% block extra_js %}
 {% if etape_biometrie and not is_edit %}
-<script src="{% static 'mariage/js/dossier_verification.js' %}"></script>
-{% elif not is_edit %}
+<script src="{% static 'mariage/js/dossier_verification.js' %}?v=20260608i"></script>
+{% endif %}
+{% if not etape_biometrie or is_edit %}
+{% if not is_edit %}
 <script src="{% static 'mariage/js/dossier_prefill.js' %}"></script>
+{% endif %}
+<script src="{% static 'mariage/js/dossier_complement.js' %}"></script>
+{% endif %}
+{% endblock %}
 {% endif %}
 {% endblock %}

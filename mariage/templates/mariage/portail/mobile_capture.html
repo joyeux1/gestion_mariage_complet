@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Capture — État civil</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .preview-empreinte { max-height: 200px; object-fit: contain; background: #f8f9fa; }
+        #btn-scanner { font-size: 1.05rem; padding: 0.85rem; }
+    </style>
+</head>
+<body class="bg-light p-3">
+    <div class="container" style="max-width:480px;">
+        <h5 class="mb-2">
+            {% if session.type_capture == 'photo' %}
+            <i class="bi bi-camera text-primary me-1"></i> Photo faciale
+            {% else %}
+            <i class="bi bi-fingerprint text-primary me-1"></i> Capture {{ session.get_type_capture_display }}
+            {% endif %}
+        </h5>
+        <p class="small text-muted mb-3">Guichet : {{ session.agent.username }}</p>
+
+        <form method="post" enctype="multipart/form-data" id="form-capture">
+            {% csrf_token %}
+            {% if session.type_capture == 'photo' %}
+            <div id="preview-wrap-photo" class="text-center mb-3 d-none">
+                <img id="preview-img-photo" src="" alt="Aperçu photo" class="w-100 rounded border" style="max-height:280px;object-fit:cover;">
+                <p class="small text-success mt-1 mb-0"><i class="bi bi-check-circle me-1"></i> Photo prête à envoyer</p>
+            </div>
+
+            <input type="file" name="fichier" id="fichier-input-photo" class="d-none" accept="image/*">
+            <input type="file" id="fichier-camera-photo" class="d-none" accept="image/*" capture="user">
+            <input type="hidden" name="image_base64" id="b64">
+
+            <button type="button" class="btn btn-primary w-100 mb-2 shadow-sm" id="btn-camera-photo">
+                <i class="bi bi-camera me-2"></i> Prendre la photo (caméra)
+            </button>
+            <p class="small text-muted text-center mb-2">
+                Ouvre la caméra frontale du téléphone pour photographier le visage.
+            </p>
+
+            <button type="button" class="btn btn-outline-secondary w-100 mb-2" id="btn-galerie-photo">
+                <i class="bi bi-folder2-open me-1"></i> Choisir dans la galerie
+            </button>
+
+            <button type="button" class="btn btn-link btn-sm w-100 mb-2 text-decoration-none" id="btn-toggle-webcam-photo">
+                Utiliser la webcam intégrée (aperçu live)
+            </button>
+            <video id="webcam" autoplay playsinline muted class="w-100 rounded border mb-2 d-none" style="max-height:320px;object-fit:cover;"></video>
+            <canvas id="canvas" class="d-none"></canvas>
+            <button type="button" class="btn btn-outline-primary w-100 mb-2 d-none" id="btn-cap">Capturer maintenant</button>
+            {% else %}
+            <div id="preview-wrap" class="text-center mb-3 d-none">
+                <img id="preview-img" src="" alt="Aperçu empreinte" class="preview-empreinte w-100 rounded border">
+                <p class="small text-success mt-1 mb-0"><i class="bi bi-check-circle me-1"></i> Image prête à envoyer</p>
+            </div>
+
+            <input type="file" name="fichier" id="fichier-input" class="d-none" accept="image/*">
+            <input type="file" id="fichier-scanner" class="d-none" accept="image/*" capture="environment">
+
+            <button type="button" class="btn btn-primary w-100 mb-2 shadow-sm" id="btn-scanner">
+                <i class="bi bi-fingerprint me-2"></i> Ouvrir le lecteur d'empreintes
+            </button>
+            <p class="small text-muted text-center mb-2">
+                Ouvre l'appareil photo ou le lecteur d'empreintes installé sur ce téléphone.
+            </p>
+
+            <button type="button" class="btn btn-outline-secondary w-100 mb-2" id="btn-galerie">
+                <i class="bi bi-folder2-open me-1"></i> Choisir un fichier / galerie
+            </button>
+
+            <button type="button" class="btn btn-link btn-sm w-100 mb-2 text-decoration-none" id="btn-toggle-camera">
+                Utiliser la caméra du téléphone
+            </button>
+            <button type="button" class="btn btn-outline-primary w-100 mb-2 d-none" id="btn-webcam">
+                <i class="bi bi-camera me-1"></i> Photographier avec la caméra
+            </button>
+            <video id="webcam" autoplay playsinline muted class="w-100 rounded border mb-2 d-none" style="max-height:240px;object-fit:cover;"></video>
+            <canvas id="canvas" class="d-none"></canvas>
+            <button type="button" class="btn btn-outline-primary w-100 mb-2 d-none" id="btn-cap">Capturer maintenant</button>
+            {% endif %}
+
+            <button type="submit" class="btn btn-success w-100 fw-bold" id="btn-envoyer" disabled>
+                <i class="bi bi-cloud-upload me-1"></i> Envoyer au guichet
+            </button>
+        </form>
+
+        <div id="msg-ok" class="alert alert-success d-none mt-3 mb-0">
+            <strong>Envoyé !</strong> Retournez au poste de saisie : la vérification démarre automatiquement.
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('form-capture').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-envoyer');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Envoi…';
+            const fd = new FormData(this);
+            try {
+                const r = await fetch(window.location.href, {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const data = await r.json();
+                if (data.success) {
+                    document.getElementById('msg-ok').classList.remove('d-none');
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Envoyé';
+                } else {
+                    alert(data.errors ? data.errors.join(' ') : 'Erreur');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i> Envoyer au guichet';
+                }
+            } catch (err) {
+                alert('Erreur réseau — vérifiez la connexion.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i> Envoyer au guichet';
+            }
+        });
+    </script>
+
+    {% if session.type_capture == 'photo' %}
+    <script>
+        const b64Input = document.getElementById('b64');
+        const btnEnvoyerPhoto = document.getElementById('btn-envoyer');
+        const previewWrapPhoto = document.getElementById('preview-wrap-photo');
+        const previewImgPhoto = document.getElementById('preview-img-photo');
+        const fichierInputPhoto = document.getElementById('fichier-input-photo');
+        const fichierCameraPhoto = document.getElementById('fichier-camera-photo');
+        const v = document.getElementById('webcam');
+        const btnCap = document.getElementById('btn-cap');
+        let streamPhoto = null;
+
+        function activerEnvoiPhoto(dataUrl, file) {
+            if (dataUrl) {
+                b64Input.value = dataUrl;
+                previewImgPhoto.src = dataUrl;
+            }
+            if (file && fichierInputPhoto) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fichierInputPhoto.files = dt.files;
+            }
+            previewWrapPhoto.classList.remove('d-none');
+            btnEnvoyerPhoto.disabled = false;
+        }
+
+        function lireFichierPhoto(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (ev) {
+                activerEnvoiPhoto(ev.target.result, file);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        fichierInputPhoto.addEventListener('change', function () {
+            if (fichierInputPhoto.files && fichierInputPhoto.files[0]) {
+                lireFichierPhoto(fichierInputPhoto.files[0]);
+            }
+        });
+
+        fichierCameraPhoto.addEventListener('change', function () {
+            if (fichierCameraPhoto.files && fichierCameraPhoto.files[0]) {
+                lireFichierPhoto(fichierCameraPhoto.files[0]);
+            }
+        });
+
+        document.getElementById('btn-camera-photo').onclick = function () {
+            fichierCameraPhoto.click();
+        };
+
+        document.getElementById('btn-galerie-photo').onclick = function () {
+            fichierInputPhoto.click();
+        };
+
+        document.getElementById('btn-toggle-webcam-photo').onclick = async function () {
+            this.classList.add('d-none');
+            try {
+                streamPhoto = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' },
+                    audio: false,
+                });
+                v.srcObject = streamPhoto;
+                await v.play();
+                v.classList.remove('d-none');
+                btnCap.classList.remove('d-none');
+            } catch (e) {
+                alert('Autorisez la caméra ou utilisez « Prendre la photo ».');
+                this.classList.remove('d-none');
+            }
+        };
+
+        btnCap.onclick = function () {
+            const c = document.getElementById('canvas');
+            c.width = v.videoWidth;
+            c.height = v.videoHeight;
+            c.getContext('2d').drawImage(v, 0, 0);
+            const dataUrl = c.toDataURL('image/jpeg', 0.92);
+            activerEnvoiPhoto(dataUrl);
+        };
+    </script>
+    {% else %}
+    <script>
+        const fichierInput = document.getElementById('fichier-input');
+        const fichierScanner = document.getElementById('fichier-scanner');
+        const btnEnvoyer = document.getElementById('btn-envoyer');
+        const previewWrap = document.getElementById('preview-wrap');
+        const previewImg = document.getElementById('preview-img');
+        const v = document.getElementById('webcam');
+        const btnWebcam = document.getElementById('btn-webcam');
+        const btnCap = document.getElementById('btn-cap');
+        let stream = null;
+
+        function afficherApercu(file) {
+            if (!file) return;
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fichierInput.files = dt.files;
+            const reader = new FileReader();
+            reader.onload = function (ev) {
+                previewImg.src = ev.target.result;
+                previewWrap.classList.remove('d-none');
+            };
+            reader.readAsDataURL(file);
+            btnEnvoyer.disabled = false;
+        }
+
+        fichierInput.addEventListener('change', function () {
+            if (fichierInput.files && fichierInput.files[0]) {
+                afficherApercu(fichierInput.files[0]);
+            }
+        });
+
+        fichierScanner.addEventListener('change', function () {
+            if (fichierScanner.files && fichierScanner.files[0]) {
+                afficherApercu(fichierScanner.files[0]);
+            }
+        });
+
+        document.getElementById('btn-scanner').onclick = function () {
+            fichierScanner.click();
+        };
+
+        document.getElementById('btn-galerie').onclick = function () {
+            fichierInput.click();
+        };
+
+        document.getElementById('btn-toggle-camera').onclick = function () {
+            btnWebcam.classList.remove('d-none');
+            this.classList.add('d-none');
+            btnWebcam.click();
+        };
+
+        btnWebcam.onclick = async function () {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false,
+                });
+                v.srcObject = stream;
+                await v.play();
+                v.classList.remove('d-none');
+                btnCap.classList.remove('d-none');
+                btnWebcam.textContent = 'Caméra active';
+                btnWebcam.disabled = true;
+            } catch (e) {
+                alert('Autorisez la caméra ou utilisez le lecteur d\'empreintes.');
+            }
+        };
+
+        btnCap.onclick = function () {
+            const c = document.getElementById('canvas');
+            c.width = v.videoWidth;
+            c.height = v.videoHeight;
+            c.getContext('2d').drawImage(v, 0, 0);
+            c.toBlob(function (blob) {
+                afficherApercu(new File([blob], 'empreinte_mobile.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', 0.92);
+        };
+    </script>
+    {% endif %}
+</body>
+</html>

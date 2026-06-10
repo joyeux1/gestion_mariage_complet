@@ -1,0 +1,18 @@
+{% extends 'mariage/base.html' %}
+{% block title %}Espace citoyen{% endblock %}
+{% block content %}
+<h2 class="fw-bold mb-4"><i class="bi bi-bar-chart me-2"></i> Statistiques publiques</h2>
+<p class="text-muted">Données globales (sans information financière).</p>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center"><h6 class="text-muted">Mariages</h6><h3>{{ total_mariages }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center"><h6 class="text-muted">Unions actives</h6><h3>{{ mariages_actifs }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center"><h6 class="text-muted">Divorces</h6><h3>{{ total_divorces }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body text-center"><h6 class="text-muted">Dossiers</h6><h3>{{ total_dossiers }}</h3></div></div></div>
+</div>
+{% if profil %}
+<div class="alert alert-success"><i class="bi bi-check-circle me-1"></i> Profil civil enregistré : {{ profil.nom }} {{ profil.prenom }} — sera utilisé le jour de votre mariage.</div>
+{% else %}
+<div class="alert alert-warning">Complétez votre <a href="{% url 'profil_citoyen_edit' %}">profil civil</a> pour préremplir automatiquement le dossier de mariage.</div>
+{% endif %}
+<a href="{% url 'profil_citoyen_edit' %}" class="btn btn-primary"><i class="bi bi-person-vcard me-1"></i> Mon profil civil</a>
+{% endblock %}

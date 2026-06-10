@@ -5,8 +5,20 @@
     if (!container) return;
 
     const verifUrl = container.dataset.verifUrl;
+    const rechercheUrl = container.dataset.rechercheUrl
+        || container.getAttribute('data-recherche-url')
+        || '';
+    const captureCreateUrl = container.dataset.captureCreateUrl;
+    const tunnelApiUrl = container.dataset.tunnelUrl;
     const etatEl = document.getElementById('dossier-verif-etat');
-    let etat = etatEl ? JSON.parse(etatEl.textContent) : {};
+    let etat = {};
+    if (etatEl && etatEl.textContent) {
+        try {
+            etat = JSON.parse(etatEl.textContent);
+        } catch (parseEtatErr) {
+            etat = {};
+        }
+    }
 
     const streams = { epoux: null, epouse: null };
     const webcamReady = { epoux: false, epouse: false };
@@ -122,6 +134,8 @@
             card.querySelectorAll('input, button').forEach(function (el) {
                 if (el.classList.contains('btn-verif-conjoint') && el.dataset.role === 'epouse') {
                     el.disabled = !enabled;
+                } else if (el.classList.contains('btn-mobile-capture') && el.dataset.role === 'epouse') {
+                    el.disabled = !enabled;
                 } else if (el.id && el.id.includes('epouse')) {
                     el.disabled = !enabled;
                 }
@@ -129,6 +143,10 @@
         });
         if (enabled) {
             setWebcamStatus('epouse', 'Webcam ou import photo disponible.');
+            ['mobile-qr-empreinte-epouse', 'mobile-qr-photo-epouse'].forEach(function (id) {
+                const qr = document.getElementById(id);
+                if (qr) qr.classList.remove('opacity-50');
+            });
         }
     }
 
@@ -144,21 +162,70 @@
         });
     }
 
+    function finaliserChampEpouxValide() {
+        const epouxInput = document.getElementById('recherche-epoux');
+        if (epouxInput) {
+            epouxInput.readOnly = true;
+            epouxInput.classList.add('bg-light');
+        }
+        const epouxLabel = document.getElementById('selection-epoux-label');
+        if (epouxLabel) {
+            epouxLabel.textContent = 'Époux validé ✓ — le système passe à la future épouse.';
+            epouxLabel.classList.remove('text-danger');
+            epouxLabel.classList.add('text-success');
+        }
+        masquerPropositionsNom('epoux');
+    }
+
+    function activerEtapeEpouse(autoFocus) {
+        setEpouseEnabled(true);
+        updateProgressBadge();
+        finaliserChampEpouxValide();
+        const epouseCard = document.getElementById('verif-nom-epouse-card');
+        if (epouseCard) {
+            epouseCard.classList.remove('opacity-50');
+            if (autoFocus !== false) {
+                epouseCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+        const epouseInput = document.getElementById('recherche-epouse');
+        if (epouseInput && autoFocus !== false) {
+            setTimeout(function () { epouseInput.focus(); }, 350);
+        }
+        const epouseLabel = document.getElementById('selection-epouse-label');
+        if (epouseLabel) {
+            epouseLabel.textContent = 'Étape 2/2 : saisissez le nom complet de la future épouse.';
+            epouseLabel.classList.remove('text-danger');
+        }
+    }
+
     function applyEtatUI(reloadOnComplete) {
         updateProgressBadge();
         if (etat.epoux_ok) {
             markRoleOk('epoux');
             setEpouseEnabled(true);
+            finaliserChampEpouxValide();
         } else {
             setEpouseEnabled(false);
+            const epouxInput = document.getElementById('recherche-epoux');
+            if (epouxInput) {
+                epouxInput.readOnly = false;
+                epouxInput.classList.remove('bg-light');
+            }
         }
         if (etat.epouse_ok) {
             markRoleOk('epouse');
+            const epouseInput = document.getElementById('recherche-epouse');
+            if (epouseInput) {
+                epouseInput.readOnly = true;
+                epouseInput.classList.add('bg-light');
+            }
+            masquerPropositionsNom('epouse');
         }
         if (reloadOnComplete && etat.epoux_ok && etat.epouse_ok) {
             setTimeout(function () {
-                window.location.reload();
-            }, 800);
+                window.location.href = window.location.pathname + '?verif_ok=1';
+            }, 1200);
         }
     }
 
@@ -332,11 +399,20 @@
             }
             fd.append('scan_empreinte', input.files[0]);
         } else if (type === 'nominative') {
-            const nom = document.getElementById(`nom-${role}`)?.value?.trim();
-            if (!nom) throw new Error('Le nom est obligatoire.');
-            fd.append('nom', nom);
-            fd.append('postnom', document.getElementById(`postnom-${role}`)?.value || '');
-            fd.append('prenom', document.getElementById(`prenom-${role}`)?.value || '');
+            const personneId = document.getElementById(`selection-${role}-id`)?.value;
+            const mot = document.getElementById(`recherche-${role}`)?.value?.trim();
+            if (personneId) {
+                fd.append('personne_id', personneId);
+                fd.append('est_epoux', document.getElementById(`selection-${role}-est-epoux`)?.value || '0');
+                fd.append('est_profil_citoyen', '0');
+            } else if (mot) {
+                const parts = parseNomComplet(mot);
+                fd.append('nom', parts.nom);
+                fd.append('postnom', parts.postnom);
+                fd.append('prenom', parts.prenom);
+            } else {
+                throw new Error('Saisissez le nom complet ou sélectionnez une personne dans la liste.');
+            }
         } else {
             const hidden = document.getElementById(`dossier-base64-${role}`);
             const b64 = hidden?.value;
@@ -349,6 +425,14 @@
     }
 
     async function verifierConjoint(type, role) {
+        if (role === 'epouse' && !etat.epoux_ok) {
+            showAlert(
+                'Étape 1/2 : validez d\'abord le futur époux avant de vérifier la future épouse.',
+                'warning'
+            );
+            return;
+        }
+
         if (type === 'faciale') {
             if (streams[role]) {
                 const ok = captureFace(role, true);
@@ -390,8 +474,24 @@
             if (data.bloque) {
                 showAlert(data.message, 'danger');
                 afficherCorrespondanceBloquee(data.match, data.message);
+                reinitialiserSelectionNom(role);
+                const labelEl = document.getElementById(`selection-${role}-label`);
+                if (labelEl) {
+                    labelEl.textContent = '⛔ Mariage actif — cette personne ne peut pas se remarier. Corrigez le nom ou procédez au divorce.';
+                    labelEl.classList.remove('text-success', 'fw-semibold');
+                    labelEl.classList.add('text-danger');
+                }
+                document.querySelectorAll(`#resultats-${role} .btn-select-personne`).forEach(function (b) {
+                    b.classList.remove('active');
+                });
                 document.querySelectorAll('.btn-verif-conjoint').forEach(function (b) {
-                    b.disabled = b.dataset.role !== role;
+                    if (role === 'epoux') {
+                        b.disabled = b.dataset.role !== 'epoux';
+                    } else if (etat.epoux_ok) {
+                        b.disabled = b.dataset.role === 'epoux';
+                    } else {
+                        b.disabled = b.dataset.role !== role;
+                    }
                 });
                 return;
             }
@@ -418,8 +518,7 @@
             markRoleOk(role);
             stopWebcam(role);
             if (role === 'epoux') {
-                setEpouseEnabled(true);
-                updateProgressBadge();
+                activerEtapeEpouse();
                 const facialPane = document.getElementById('verif-faciale');
                 if (facialPane && facialPane.classList.contains('show')) {
                     startWebcam('epouse');
@@ -427,7 +526,14 @@
             }
             if (data.complete) {
                 etat = data.etat;
+                showAlert(
+                    'Vérification terminée : époux et épouse sans mariage actif. Ouverture du formulaire d\'enregistrement…',
+                    'success'
+                );
+                updateProgressBadge();
                 applyEtatUI(true);
+            } else if (role === 'epoux' && etat.epoux_ok && !etat.epouse_ok) {
+                activerEtapeEpouse();
             } else {
                 buttons.forEach(function (b) {
                     if (b.dataset.role === 'epouse' && etat.epoux_ok) {
@@ -485,5 +591,713 @@
         if (!etat.epoux_ok) startWebcam('epoux');
     }
 
+    // --- Recherche nominative automatique (sans boutons Vérifier) ---
+    const rechercheTimers = {};
+    const absenceTimers = {};
+    const rechercheSeq = { epoux: 0, epouse: 0 };
+    const derniersResultats = { epoux: [], epouse: [] };
+    const nomAutoState = {
+        epoux: { motValide: '', enCours: false },
+        epouse: { motValide: '', enCours: false },
+    };
+
+    function parseNomComplet(texte) {
+        const mots = (texte || '').trim().split(/\s+/).filter(Boolean);
+        return {
+            nom: mots[0] || '',
+            postnom: mots[1] || '',
+            prenom: mots.slice(2).join(' ') || '',
+        };
+    }
+
+    function roleEstValide(role) {
+        return role === 'epoux' ? etat.epoux_ok : etat.epouse_ok;
+    }
+
+    function peutRechercherNom(role) {
+        const input = document.getElementById(`recherche-${role}`);
+        if (!input || input.disabled) return false;
+        if (role === 'epouse' && !etat.epoux_ok) return false;
+        return !roleEstValide(role);
+    }
+
+    function urlsPhotosProposition(r) {
+        const carteUrl = r.photo_carte_url || '';
+        let profilUrl = r.photo_profil_url || r.photo_url || '';
+        let depuisCarte = !!r.photo_profil_depuis_carte;
+        if (!profilUrl && carteUrl) {
+            profilUrl = carteUrl;
+            depuisCarte = true;
+        } else if (profilUrl && carteUrl && profilUrl === carteUrl) {
+            depuisCarte = true;
+        }
+        return { profilUrl, carteUrl, depuisCarte };
+    }
+
+    function htmlPhotoProfilProposition(profilUrl, labelNom, depuisCarte) {
+        if (!profilUrl) {
+            return `<div class="rounded-circle bg-secondary bg-opacity-25 flex-shrink-0 d-flex align-items-center justify-content-center text-muted border"
+                       style="width:58px;height:58px;" title="Photo absente"><i class="bi bi-person fs-5"></i></div>`;
+        }
+        const style = depuisCarte
+            ? 'width:58px;height:58px;object-fit:cover;object-position:center 12%;cursor:pointer;'
+            : 'width:58px;height:58px;object-fit:cover;cursor:pointer;';
+        return `<img src="${profilUrl}" alt="Photo de profil" title="Photo de profil — cliquer pour agrandir"
+                   class="rounded-circle border border-2 border-primary btn-photo-nom-verif flex-shrink-0 verif-nom-photo-profil"
+                   style="${style}" loading="lazy"
+                   data-photo-url="${profilUrl}"
+                   data-photo-label="Photo de profil — ${labelNom}">`;
+    }
+
+    function htmlPhotoCarteProposition(carteUrl, labelNom) {
+        if (!carteUrl) {
+            return `<div class="rounded border bg-secondary bg-opacity-25 flex-shrink-0 d-flex align-items-center justify-content-center text-muted"
+                       style="width:72px;height:58px;" title="Carte absente"><i class="bi bi-credit-card-2-front"></i></div>`;
+        }
+        return `<img src="${carteUrl}" alt="Carte d'électeur" title="Carte d'électeur — cliquer pour agrandir"
+                   class="rounded border border-2 border-secondary btn-photo-nom-verif flex-shrink-0 verif-nom-photo-carte"
+                   style="width:72px;height:58px;object-fit:contain;cursor:pointer;background:#fff;"
+                   loading="lazy"
+                   data-photo-url="${carteUrl}"
+                   data-photo-label="Carte d'électeur — ${labelNom}">`;
+    }
+
+    const modalPhotoEl = document.getElementById('modalPhotoNomVerif');
+    const modalPhotoImg = document.getElementById('modalPhotoNomVerifImg');
+    const modalPhotoTitle = document.getElementById('modalPhotoNomVerifLabel');
+    let modalPhotoInstance = null;
+
+    function getModalPhoto() {
+        if (!modalPhotoEl || typeof bootstrap === 'undefined') return null;
+        if (!modalPhotoInstance) {
+            modalPhotoInstance = new bootstrap.Modal(modalPhotoEl);
+        }
+        return modalPhotoInstance;
+    }
+
+    function ouvrirPhotoNom(url, label) {
+        const modalPhoto = getModalPhoto();
+        if (!modalPhoto || !url || !modalPhotoImg) return;
+        modalPhotoImg.src = url;
+        modalPhotoImg.alt = label || 'Photo';
+        if (modalPhotoTitle) modalPhotoTitle.textContent = label || 'Photo';
+        modalPhoto.show();
+    }
+
+    if (modalPhotoEl) {
+        modalPhotoEl.addEventListener('hidden.bs.modal', function () {
+            if (modalPhotoImg) modalPhotoImg.removeAttribute('src');
+        });
+    }
+
+    function reinitialiserSelectionNom(role) {
+        const idEl = document.getElementById(`selection-${role}-id`);
+        if (idEl) idEl.value = '';
+        const labelEl = document.getElementById(`selection-${role}-label`);
+        if (labelEl) {
+            labelEl.classList.remove('text-success', 'fw-semibold');
+        }
+    }
+
+    function fetchRechercheNominative(role, mot, permute) {
+        let url = `${rechercheUrl}?q=${encodeURIComponent(mot)}&role=${encodeURIComponent(role)}`;
+        if (permute) url += '&permute=1';
+        return fetch(url, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+        }).then(function (r) {
+            if (!r.ok) {
+                throw new Error(`Recherche impossible (${r.status}).`);
+            }
+            return r.json();
+        });
+    }
+
+    function afficherErreurRecherche(role, message) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        if (!listEl) return;
+        listEl.classList.remove('d-none');
+        listEl.innerHTML = `<div class="list-group-item text-danger py-2"><i class="bi bi-exclamation-triangle me-1"></i> ${message}</div>`;
+    }
+
+    function afficherChargementRecherche(role) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        if (!listEl) return;
+        listEl.classList.remove('d-none');
+        listEl.innerHTML = '<div class="list-group-item text-muted py-2"><i class="bi bi-search me-1"></i> Recherche en cours…</div>';
+    }
+
+    function masquerPropositionsNom(role) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        listEl.classList.add('d-none');
+    }
+
+    function afficherPanneauPropositions(role) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        if (listEl) listEl.classList.remove('d-none');
+    }
+
+    function nomCompletSuffisant(mot) {
+        return mot.split(/\s+/).filter(Boolean).length >= 3;
+    }
+
+    async function validerAutomatiquementSiLibre(role, mot) {
+        if (!peutRechercherNom(role) || !mot || !nomCompletSuffisant(mot)) return;
+        if (roleEstValide(role)) return;
+        if (nomAutoState[role].enCours) return;
+        if (nomAutoState[role].motValide === mot) {
+            if (role === 'epoux' && etat.epoux_ok && !etat.epouse_ok) {
+                activerEtapeEpouse();
+            }
+            return;
+        }
+        if (derniersResultats[role].length > 0) return;
+        if (document.getElementById(`selection-${role}-id`)?.value) return;
+
+        nomAutoState[role].enCours = true;
+        afficherLibreDeSeMarier(role);
+
+        const labelEl = document.getElementById(`selection-${role}-label`);
+        if (labelEl) {
+            labelEl.textContent = 'Contrôle des permutations nom / postnom / prénom…';
+        }
+
+        try {
+            const dataPerm = await fetchRechercheNominative(role, mot, true);
+            if (dataPerm.success && dataPerm.resultats && dataPerm.resultats.length > 0) {
+                afficherResultatsNominatifs(role, dataPerm.resultats);
+                if (labelEl) {
+                    labelEl.textContent = '⛔ Mariage actif détecté après permutation — dossier refusé.';
+                    labelEl.classList.add('text-danger');
+                    labelEl.classList.remove('text-success');
+                }
+                return;
+            }
+
+            if (labelEl) {
+                labelEl.textContent = messagePeutSeMarier(role) + ' Validation…';
+            }
+
+            await verifierConjoint('nominative', role);
+
+            if (roleEstValide(role)) {
+                nomAutoState[role].motValide = mot;
+            }
+
+            if (role === 'epoux' && etat.epoux_ok && !etat.epouse_ok) {
+                activerEtapeEpouse();
+            }
+        } catch (err) {
+            if (labelEl) {
+                labelEl.textContent = 'Erreur lors de la vérification automatique.';
+            }
+            showAlert(err.message || 'Erreur de vérification automatique.', 'danger');
+        } finally {
+            nomAutoState[role].enCours = false;
+        }
+    }
+
+    function messagePeutSeMarier(role) {
+        if (role === 'epouse') {
+            return 'Ce nom n\'existe pas sur un acte de mariage actif — elle peut se marier.';
+        }
+        return 'Ce nom n\'existe pas sur un acte de mariage actif — il peut se marier.';
+    }
+
+    function afficherLibreDeSeMarier(role) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        const labelEl = document.getElementById(`selection-${role}-label`);
+        if (listEl) {
+            afficherPanneauPropositions(role);
+            listEl.innerHTML = `<div class="list-group-item text-success py-2 border-success border-start border-3">
+                <i class="bi bi-check-circle-fill me-1"></i> ${messagePeutSeMarier(role)}
+            </div>`;
+        }
+        if (labelEl) {
+            labelEl.textContent = 'Vérification automatique en cours…';
+            labelEl.classList.remove('text-danger');
+            labelEl.classList.add('text-success');
+        }
+    }
+
+    function planifierValidationAutomatique(role, mot) {
+        clearTimeout(absenceTimers[role]);
+        absenceTimers[role] = setTimeout(function () {
+            validerAutomatiquementSiLibre(role, mot);
+        }, 400);
+    }
+
+    function afficherResultatsNominatifs(role, resultats) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        const labelEl = document.getElementById(`selection-${role}-label`);
+        if (!listEl) return;
+
+        derniersResultats[role] = resultats || [];
+        reinitialiserSelectionNom(role);
+
+        if (!resultats.length) {
+            const mot = document.getElementById(`recherche-${role}`)?.value?.trim() || '';
+            if (!mot) {
+                masquerPropositionsNom(role);
+            } else if (nomCompletSuffisant(mot)) {
+                afficherLibreDeSeMarier(role);
+                planifierValidationAutomatique(role, mot);
+            } else {
+                afficherPanneauPropositions(role);
+                listEl.innerHTML = '<div class="list-group-item text-muted py-2"><i class="bi bi-pencil me-1"></i> Complétez le nom complet (Nom Postnom Prénom)…</div>';
+                if (labelEl) {
+                    labelEl.textContent = 'Saisie en cours — saisissez Nom, Postnom et Prénom.';
+                    labelEl.classList.remove('text-success', 'text-danger');
+                }
+            }
+            return;
+        }
+
+        clearTimeout(absenceTimers[role]);
+        afficherPanneauPropositions(role);
+
+        if (labelEl) {
+            labelEl.textContent = '⛔ Mariage(s) actif(s) détecté(s) — ces personnes ne peuvent pas se remarier. '
+                + 'Cliquez pour confirmer le blocage, ou saisissez un autre nom si ce n\'est pas la bonne personne.';
+            labelEl.classList.remove('text-success', 'fw-semibold');
+            labelEl.classList.add('text-danger');
+        }
+
+        listEl.innerHTML = resultats.map(function (r) {
+            const labelNom = `${r.nom} ${r.postnom} ${r.prenom}`.trim();
+            const photos = urlsPhotosProposition(r);
+            const photoProfilHtml = htmlPhotoProfilProposition(photos.profilUrl, labelNom, photos.depuisCarte);
+            const photoCarteHtml = htmlPhotoCarteProposition(photos.carteUrl, labelNom);
+
+            const acteLine = r.numero_acte
+                ? `<div class="text-danger fw-semibold" style="font-size:0.72rem;"><i class="bi bi-file-earmark-text me-1"></i>Acte N° ${r.numero_acte}${r.conjoint_lie ? ' — Union avec ' + r.conjoint_lie : ''}</div>`
+                : '';
+
+            return `<button type="button" class="list-group-item list-group-item-action py-2 px-2 btn-select-personne text-start border-0 verif-nom-proposition-item"
+                data-role="${role}" data-id="${r.id}" data-est-epoux="${r.est_epoux ? '1' : '0'}"
+                data-profil="0" data-label="${r.nom_complet} (acte ${r.numero_acte || ''})">
+                <div class="d-flex gap-2 align-items-start border rounded p-2 bg-white border-danger border-start border-3 shadow-sm">
+                    <div class="flex-shrink-0 text-center" style="width:58px;">
+                        ${photoProfilHtml}
+                        <div class="text-muted mt-1" style="font-size:0.58rem;line-height:1;">Profil</div>
+                    </div>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="fw-semibold text-truncate">${r.nom} <span class="text-muted fw-normal">${r.postnom}</span> ${r.prenom}</div>
+                        ${acteLine}
+                        <div class="text-muted" style="font-size:0.72rem;line-height:1.35;">
+                            <i class="bi bi-geo-alt me-1"></i>
+                            Commune : <strong>${r.commune_enregistrement}</strong> —
+                            Ville : <strong>${r.ville_enregistrement}</strong> —
+                            Province : <strong>${r.province_enregistrement}</strong>
+                        </div>
+                        ${r.numero_piece ? `<div class="text-muted" style="font-size:0.72rem;">Pièce : ${r.numero_piece}</div>` : ''}
+                    </div>
+                    <div class="flex-shrink-0 text-center" style="width:72px;">
+                        ${photoCarteHtml}
+                        <div class="text-muted mt-1" style="font-size:0.58rem;line-height:1;">Carte</div>
+                    </div>
+                </div>
+            </button>`;
+        }).join('');
+    }
+
+    function lancerRechercheNominative(role, mot) {
+        const listEl = document.getElementById(`resultats-${role}`);
+        if (!rechercheUrl) {
+            afficherErreurRecherche(role, 'URL de recherche non configurée.');
+            return;
+        }
+        if (!peutRechercherNom(role)) return;
+
+        if (!mot) {
+            masquerPropositionsNom(role);
+            derniersResultats[role] = [];
+            reinitialiserSelectionNom(role);
+            nomAutoState[role].motValide = '';
+            clearTimeout(absenceTimers[role]);
+            return;
+        }
+
+        const seq = ++rechercheSeq[role];
+        afficherChargementRecherche(role);
+
+        fetchRechercheNominative(role, mot, false)
+            .then(function (data) {
+                if (seq !== rechercheSeq[role]) return;
+                if (data.success) {
+                    afficherResultatsNominatifs(role, data.resultats || []);
+                } else {
+                    const msg = data.errors
+                        ? Object.values(data.errors).flat().join(' ')
+                        : 'Recherche nominative indisponible.';
+                    afficherErreurRecherche(role, msg);
+                }
+            })
+            .catch(function (err) {
+                if (seq !== rechercheSeq[role]) return;
+                afficherErreurRecherche(role, err.message || 'Erreur de connexion lors de la recherche.');
+            });
+    }
+
+    function initialiserRechercheNominative() {
+        ['epoux', 'epouse'].forEach(function (role) {
+            const input = document.getElementById(`recherche-${role}`);
+            if (!input) return;
+
+            function declencherRecherche() {
+                if (!peutRechercherNom(role)) return;
+                const selId = document.getElementById(`selection-${role}-id`);
+                if (selId) selId.value = '';
+                nomAutoState[role].motValide = '';
+                clearTimeout(absenceTimers[role]);
+                clearTimeout(rechercheTimers[role]);
+                rechercheTimers[role] = setTimeout(function () {
+                    lancerRechercheNominative(role, input.value.trim());
+                }, 150);
+            }
+
+            input.addEventListener('input', declencherRecherche);
+            input.addEventListener('focus', function () {
+                const mot = input.value.trim();
+                if (mot && peutRechercherNom(role)) {
+                    lancerRechercheNominative(role, mot);
+                }
+            });
+
+            if (input.value.trim() && peutRechercherNom(role)) {
+                lancerRechercheNominative(role, input.value.trim());
+            }
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        const photoBtn = e.target.closest('.btn-photo-nom-verif');
+        if (photoBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            ouvrirPhotoNom(photoBtn.dataset.photoUrl, photoBtn.dataset.photoLabel);
+            return;
+        }
+
+        const btn = e.target.closest('.btn-select-personne');
+        if (!btn) return;
+        const role = btn.dataset.role;
+        document.getElementById(`selection-${role}-id`).value = btn.dataset.id;
+        document.getElementById(`selection-${role}-est-epoux`).value = btn.dataset.estEpoux;
+        document.getElementById(`selection-${role}-profil`).value = '0';
+        const labelEl = document.getElementById(`selection-${role}-label`);
+        if (labelEl) {
+            labelEl.textContent = 'Sélectionné : ' + btn.dataset.label + ' — vérification…';
+            labelEl.classList.add('text-success', 'fw-semibold');
+        }
+        document.querySelectorAll(`#resultats-${role} .btn-select-personne`).forEach(function (b) {
+            b.classList.toggle('active', b === btn);
+        });
+        verifierConjoint('nominative', role);
+    });
+
+    // --- Capture mobile (téléphone sur réseau local / internet) ---
+    const pollIntervals = {};
+
+    function urlQrCode(targetUrl, size) {
+        return 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size
+            + '&data=' + encodeURIComponent(targetUrl);
+    }
+
+    function suffixQrType(typeCapture) {
+        return typeCapture === 'photo' ? 'photo' : 'empreinte';
+    }
+
+    function afficherQrDansCarre(role, targetUrl, typeCapture) {
+        const suffix = suffixQrType(typeCapture || 'empreinte');
+        const box = document.getElementById('mobile-qr-' + suffix + '-' + role);
+        if (!box || !targetUrl) return;
+        box.classList.remove('opacity-50');
+        box.innerHTML = '<a href="' + targetUrl + '" target="_blank" rel="noopener" title="' + targetUrl + '">'
+            + '<img src="' + urlQrCode(targetUrl, 110) + '" alt="QR code capture" width="110" height="110" class="rounded">'
+            + '</a>';
+    }
+
+    function afficherQrLocalPourTous(urlLocal, typesCapture) {
+        const types = typesCapture || ['empreinte', 'photo'];
+        types.forEach(function (type) {
+            ['epoux', 'epouse'].forEach(function (role) {
+                afficherQrDansCarre(role, urlLocal, type);
+            });
+        });
+    }
+
+    function banniereTunnelPourType(typeCapture) {
+        return typeCapture === 'photo'
+            ? document.getElementById('tunnel-faciale-status')
+            : document.getElementById('tunnel-empreinte-status');
+    }
+
+    function typesCaptureActifs() {
+        const faciale = document.getElementById('verif-faciale');
+        if (faciale && faciale.classList.contains('show') && faciale.classList.contains('active')) {
+            return ['photo'];
+        }
+        return ['empreinte'];
+    }
+
+    async function appliquerPhotoMobileRecue(role, statut, statusEl) {
+        const hidden = document.getElementById('dossier-base64-' + role);
+        if (!hidden) return false;
+
+        if (statut.image_base64) {
+            hidden.value = statut.image_base64;
+            hidden.dataset.captured = '1';
+            showPreview(role, statut.image_base64);
+        } else if (statut.fichier_url) {
+            const fileUrl = statut.fichier_url.startsWith('http')
+                ? statut.fichier_url
+                : (window.location.origin + statut.fichier_url);
+            const fileResp = await fetch(fileUrl);
+            const blob = await fileResp.blob();
+            const dataUrl = await new Promise(function (resolve, reject) {
+                const reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            hidden.value = dataUrl;
+            hidden.dataset.captured = '1';
+            showPreview(role, dataUrl);
+        } else {
+            return false;
+        }
+
+        stopWebcam(role);
+        setWebcamStatus(role, 'Photo reçue depuis le téléphone — vérification en cours…');
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="text-success fw-semibold">Photo reçue — vérification en cours…</span>';
+        }
+        showAlert('Photo reçue depuis le téléphone. Lancement de la vérification faciale…', 'success');
+        await verifierConjoint('faciale', role);
+        return true;
+    }
+
+    async function demarrerCaptureMobile(typeCapture, role) {
+        if (!captureCreateUrl) {
+            showAlert('Capture mobile non configurée.', 'warning');
+            return;
+        }
+        if (tunnelApiUrl) {
+            await demarrerTunnelAutomatique(typeCapture === 'photo' ? 'photo' : 'empreinte');
+        }
+        const statusEl = document.getElementById(`mobile-status-${typeCapture}-${role}`)
+            || document.getElementById(`mobile-status-empreinte-${role}`);
+        if (statusEl) statusEl.textContent = 'Création de la session…';
+
+        const fd = new FormData();
+        fd.append('type_capture', typeCapture === 'photo' ? 'photo' : 'empreinte');
+        fd.append('role', role);
+        fd.append('csrfmiddlewaretoken', getCsrfToken());
+
+        try {
+            const resp = await fetch(captureCreateUrl, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await resp.json();
+            if (!data.success) throw new Error('Impossible de créer la session mobile.');
+
+            const pollUrl = data.poll_url.startsWith('http') ? data.poll_url : (window.location.origin + data.poll_url);
+            const captureUrlDirect = data.capture_url_direct || data.capture_url || data.capture_url_short;
+            const captureUrlShort = data.capture_url_short || captureUrlDirect;
+            const modeTunnel = data.mode === 'tunnel' || data.tunnel_actif;
+            const phoneUrl = modeTunnel ? captureUrlDirect : captureUrlShort;
+
+            afficherQrDansCarre(role, phoneUrl, typeCapture);
+
+            if (statusEl) {
+                statusEl.innerHTML =
+                    (modeTunnel
+                        ? '<span class="badge bg-success mb-1">Mode Internet (tunnel)</span> '
+                        : '<span class="badge bg-secondary mb-1">Mode Wi‑Fi local</span> ') +
+                    '<span class="d-block small text-muted">Scannez le QR ou ouvrez :</span>' +
+                    `<a href="${phoneUrl}" target="_blank" rel="noopener" class="small fw-semibold text-break">${phoneUrl}</a>` +
+                    '<span class="d-block small text-muted mt-1">En attente de la capture…</span>';
+            }
+            if (modeTunnel) {
+                showAlert(
+                    'Scannez le QR code ou ouvrez sur le téléphone : <strong>' + phoneUrl + '</strong>',
+                    'success'
+                );
+            } else {
+                showAlert(
+                    'Scannez le QR code ou ouvrez : <strong>' + phoneUrl + '</strong>',
+                    'warning'
+                );
+            }
+
+            if (pollIntervals[role + typeCapture]) {
+                clearInterval(pollIntervals[role + typeCapture]);
+            }
+            pollIntervals[role + typeCapture] = setInterval(async function () {
+                try {
+                    const st = await fetch(pollUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const statut = await st.json();
+                    if (statut.expired) {
+                        clearInterval(pollIntervals[role + typeCapture]);
+                        if (statusEl) statusEl.textContent = 'Session expirée.';
+                        return;
+                    }
+                    if (statut.ready) {
+                        clearInterval(pollIntervals[role + typeCapture]);
+                        if (typeCapture === 'photo') {
+                            await appliquerPhotoMobileRecue(role, statut, statusEl);
+                        } else if (statut.fichier_url || statut.image_base64) {
+                            let file;
+                            if (statut.fichier_url) {
+                                const fileUrl = statut.fichier_url.startsWith('http')
+                                    ? statut.fichier_url
+                                    : (window.location.origin + statut.fichier_url);
+                                const fileResp = await fetch(fileUrl);
+                                const blob = await fileResp.blob();
+                                file = new File([blob], 'empreinte_mobile.jpg', { type: blob.type || 'image/jpeg' });
+                            } else {
+                                const resp = await fetch(statut.image_base64);
+                                const blob = await resp.blob();
+                                file = new File([blob], 'empreinte_mobile.jpg', { type: 'image/jpeg' });
+                            }
+                            const input = document.getElementById(`empreinte-${role}-file`);
+                            if (input) {
+                                const dt = new DataTransfer();
+                                dt.items.add(file);
+                                input.files = dt.files;
+                            }
+                            if (statusEl) {
+                                statusEl.innerHTML = '<span class="text-success fw-semibold">Empreinte reçue — vérification en cours…</span>';
+                            }
+                            showAlert('Empreinte reçue depuis le téléphone. Lancement de la vérification anti-polygamie…', 'success');
+                            if (typeCapture === 'empreinte') {
+                                await verifierConjoint('empreinte', role);
+                            }
+                        }
+                    }
+                } catch (pollErr) {
+                    /* ignore transient poll errors */
+                }
+            }, 1500);
+        } catch (err) {
+            if (statusEl) statusEl.textContent = '';
+            showAlert(err.message || 'Erreur capture mobile.', 'danger');
+        }
+    }
+
+    document.querySelectorAll('.btn-mobile-capture').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            demarrerCaptureMobile(btn.dataset.typeCapture, btn.dataset.role);
+        });
+    });
+
+    // --- Tunnel Cloudflare : démarrage auto à l'ouverture de l'onglet Empreintes ---
+    let tunnelAutoEnCours = false;
+
+    function afficherBandeauTunnel(bannerEl, html, type) {
+        if (!bannerEl) return;
+        bannerEl.classList.remove('d-none', 'alert-info', 'alert-success', 'alert-warning', 'alert-danger');
+        bannerEl.classList.add('alert-' + (type || 'info'));
+        bannerEl.innerHTML = html;
+    }
+
+    function htmlTunnelPret(url) {
+        const base = url.replace(/\/$/, '');
+        const local = base + '/local/';
+        return (
+            '<strong><i class="bi bi-wifi me-1"></i> Tunnel Internet prêt</strong> — ' +
+            'Le téléphone peut ouvrir : ' +
+            '<a href="' + local + '" target="_blank" rel="noopener" class="alert-link fw-bold">' +
+            local + '</a> (ou scannez le QR après « Capturer / Photo depuis le téléphone »).'
+        );
+    }
+
+    async function demarrerTunnelAutomatique(typeCapturePrefere) {
+        if (!tunnelApiUrl || tunnelAutoEnCours) return;
+        const typesQr = typeCapturePrefere ? [typeCapturePrefere] : typesCaptureActifs();
+        const bannerEl = typeCapturePrefere
+            ? banniereTunnelPourType(typeCapturePrefere)
+            : (banniereTunnelPourType(typesQr[0]) || document.getElementById('tunnel-empreinte-status'));
+        tunnelAutoEnCours = true;
+        afficherBandeauTunnel(
+            bannerEl,
+            '<span class="spinner-border spinner-border-sm me-1" role="status"></span> ' +
+            'Démarrage automatique du tunnel pour le téléphone…',
+            'info'
+        );
+        try {
+            const statut = await fetch(tunnelApiUrl, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            }).then(function (r) { return r.json(); });
+
+            if (statut.ok && statut.url) {
+                afficherBandeauTunnel(bannerEl, htmlTunnelPret(statut.url), 'success');
+                afficherQrLocalPourTous(
+                    statut.local_url || (statut.url.replace(/\/$/, '') + '/local/'),
+                    typesQr
+                );
+                return;
+            }
+
+            const resp = await fetch(tunnelApiUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+            });
+            const data = await resp.json();
+            if (data.ok && data.url) {
+                afficherBandeauTunnel(bannerEl, htmlTunnelPret(data.url), 'success');
+                afficherQrLocalPourTous(
+                    data.local_url || (data.url.replace(/\/$/, '') + '/local/'),
+                    typesQr
+                );
+            } else {
+                afficherBandeauTunnel(
+                    bannerEl,
+                    'Tunnel indisponible : ' + (data.error || 'vérifiez que cloudflared est installé.'),
+                    'warning'
+                );
+            }
+        } catch (err) {
+            afficherBandeauTunnel(bannerEl, 'Impossible de contacter le serveur pour le tunnel.', 'warning');
+        } finally {
+            tunnelAutoEnCours = false;
+        }
+    }
+
+    document.querySelectorAll('[data-bs-target="#verif-empreinte"]').forEach(function (btn) {
+        btn.addEventListener('shown.bs.tab', function () {
+            demarrerTunnelAutomatique('empreinte');
+        });
+    });
+
+    document.querySelectorAll('[data-bs-target="#verif-faciale"]').forEach(function (btn) {
+        btn.addEventListener('shown.bs.tab', function () {
+            stopWebcam('epoux');
+            stopWebcam('epouse');
+            if (!etat.epoux_ok) startWebcam('epoux');
+            else if (etat.epoux_ok && !etat.epouse_ok) startWebcam('epouse');
+            demarrerTunnelAutomatique('photo');
+        });
+    });
+
+    const empreintePane = document.getElementById('verif-empreinte');
+    if (empreintePane && empreintePane.classList.contains('show') && empreintePane.classList.contains('active')) {
+        demarrerTunnelAutomatique('empreinte');
+    }
+
+    const facialePaneInit = document.getElementById('verif-faciale');
+    if (facialePaneInit && facialePaneInit.classList.contains('show') && facialePaneInit.classList.contains('active')) {
+        demarrerTunnelAutomatique('photo');
+    }
+
     applyEtatUI(false);
+    initialiserRechercheNominative();
 })();

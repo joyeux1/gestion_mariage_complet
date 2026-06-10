@@ -13,8 +13,10 @@ from django.views.generic import ListView, DetailView, CreateView, TemplateView,
 from django.db.models import Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views import View
 from django.shortcuts import get_object_or_404, render, redirect
+from django.template.loader import render_to_string
 from django.contrib import messages
 from django.db import transaction
 
@@ -32,6 +34,7 @@ from .liste_filtres import (
     filtrer_mariages_par_acces,
     filtres_actifs,
     lire_parametres_filtre,
+    queryset_dossiers_liste,
 )
 from .permissions_commune import (
     commune_caisse_active,
@@ -44,6 +47,7 @@ from .services_biometrie import ReconnaissanceFacialeService
 from .verification_dossier import (
     appliquer_resultat_verif,
     lire_etat_verif,
+    reinitialiser_epoux_verif,
     reinitialiser_verif,
     sauver_etat_verif,
     verif_complete,
@@ -70,27 +74,42 @@ class SmartSecurityMixin(LoginRequiredMixin):
     allowed_roles = []  # À définir dans chaque vue (ex: ['OPERATEUR', 'OFFICIER'])
 
     def dispatch(self, request, *args, **kwargs):
-        # 1. Sécurité de base : l'utilisateur doit être connecté
         if not request.user.is_authenticated:
             return redirect('login')
 
-        # 2. PASSE-PARTOUT TECHNIQUE : Le super-utilisateur contourne toutes les restrictions
         if request.user.is_superuser:
             return super().dispatch(request, *args, **kwargs)
 
-        # 3. Vérification du profil pour les utilisateurs normaux
+        from .role_permissions import (
+            est_portail_public,
+            url_accueil_utilisateur,
+            urls_interdites_par_role,
+        )
+
+        if est_portail_public(request.user):
+            messages.error(request, 'Espace réservé aux agents de l\'état civil.')
+            return redirect(url_accueil_utilisateur(request.user))
+
         if not getattr(request.user, 'role', None):
             messages.error(request, "Accès refusé. Vous ne possédez pas de rôle d'agent civil.")
-            return redirect('dashboard')
+            return redirect('accueil')
 
-        # Récupération et normalisation du rôle (Gestion des majuscules)
         user_role = request.user.role.upper()
         allowed_roles_upper = [role.upper() for role in self.allowed_roles]
 
-        # 4. Contrôle strict du rôle requis
         if allowed_roles_upper and user_role not in allowed_roles_upper:
-            messages.error(request, f"Accès interdit pour le rôle d'agent : {request.user.get_role_display() if hasattr(request.user, 'get_role_display') else request.user.role}")
-            return redirect('dashboard')
+            messages.error(
+                request,
+                f"Accès interdit pour le rôle : "
+                f"{request.user.get_role_display() if hasattr(request.user, 'get_role_display') else request.user.role}",
+            )
+            return redirect(url_accueil_utilisateur(request.user))
+
+        url_name = getattr(request.resolver_match, 'url_name', None)
+        interdits = urls_interdites_par_role().get(user_role) or set()
+        if url_name and url_name in interdits:
+            messages.warning(request, 'Votre rôle ne permet pas d\'accéder à cette section.')
+            return redirect(url_accueil_utilisateur(request.user))
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -128,6 +147,19 @@ class DashboardView(LoginRequiredMixin, ListView):
     model = Mariage
     template_name = 'mariage/dashboard.html'
     context_object_name = 'derniers_mariages'
+
+    def dispatch(self, request, *args, **kwargs):
+        from .role_permissions import est_portail_public, role_utilisateur, url_accueil_utilisateur
+        if request.user.is_authenticated:
+            if est_portail_public(request.user):
+                return redirect(url_accueil_utilisateur(request.user))
+            if role_utilisateur(request.user) == 'OPERATEUR':
+                return redirect('dossier_list')
+            if role_utilisateur(request.user) == 'MAIRE':
+                return redirect('dashboard_maire')
+            if role_utilisateur(request.user) == 'HIERARCHIE':
+                return redirect('dashboard_hierarchie')
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         return (
@@ -350,16 +382,82 @@ def _identite_prefill(identite):
 
 def _commune_agent_utilisateur(user):
     if user.commune_id:
+        if getattr(user, 'affecte_mairie', False) and user.commune.ville_id:
+            from .role_permissions import mairie_commune_ville
+            mairie = mairie_commune_ville(user.commune.ville)
+            if mairie:
+                return mairie
         return user.commune
     if user.is_superuser:
         return Commune.objects.first()
     return None
 
 
+def _prefill_depuis_profil_citoyen(identite):
+    """Enrichit le préremplissage avec le profil citoyen si disponible."""
+    base = _identite_prefill(identite)
+    if not identite:
+        return base
+    from .portal_views import profil_citoyen_pour_identite
+    profil_id = identite.get('profil_citoyen_id')
+    profil = None
+    if profil_id:
+        from .models import ProfilCitoyen
+        profil = ProfilCitoyen.objects.filter(pk=profil_id).first()
+    if not profil:
+        profil = profil_citoyen_pour_identite(
+            identite.get('nom'), identite.get('postnom'), identite.get('prenom'),
+            identite.get('numero_piece'),
+        )
+    if profil:
+        base.update({
+            'nom': profil.nom or base.get('nom', ''),
+            'postnom': profil.post_nom or base.get('postnom', ''),
+            'prenom': profil.prenom or base.get('prenom', ''),
+            'telephone': profil.telephone or '',
+            'numero_piece': profil.numero_piece or '',
+            'date_naissance': profil.date_naissance.isoformat() if profil.date_naissance else '',
+            'lieu_naissance': profil.lieu_naissance or '',
+            'sexe': profil.sexe or '',
+            'nationalite': profil.nationalite or '',
+            'profession': profil.profession or '',
+        })
+    return base
+
+
 def _creer_empreinte_depuis_fichier(fichier):
     if not fichier:
         return None
     return EmpreinteDigitale.objects.create(empreinte=fichier, doigt="Index Droit")
+
+
+def _creer_reconnaissance_faciale_depuis_fichier(fichier):
+    """Enregistre photo + encodage facial pour les futures vérifications."""
+    if not fichier:
+        return None
+    try:
+        fichier.seek(0)
+        encodage = ReconnaissanceFacialeService.extraire_encodage_facial(fichier)
+        encodage_facial = json.loads(ReconnaissanceFacialeService.encoder_json(encodage))
+        reconnaissance = ReconnaissanceFaciale(encodage_facial=encodage_facial)
+        fichier.seek(0)
+        nom = getattr(fichier, 'name', None) or 'capture_faciale.jpg'
+        reconnaissance.photo.save(nom, fichier, save=False)
+        reconnaissance.save()
+        return reconnaissance
+    except ValidationError:
+        return None
+    except Exception:
+        return None
+
+
+def _attacher_reconnaissance_faciale(conjoint, fichier):
+    if not conjoint or not fichier:
+        return
+    reconnaissance = _creer_reconnaissance_faciale_depuis_fichier(fichier)
+    if reconnaissance:
+        conjoint.reconnaissance_faciale = reconnaissance
+        conjoint.save(update_fields=['reconnaissance_faciale'])
 
 
 class DossierListView(SmartSecurityMixin, ListView):
@@ -371,19 +469,9 @@ class DossierListView(SmartSecurityMixin, ListView):
 
     def get_queryset(self):
         params = lire_parametres_filtre(self.request)
-        qs = Dossier.objects.select_related(
-            'epoux',
-            'epouse',
-            'epoux__reconnaissance_faciale',
-            'epouse__reconnaissance_faciale',
-            'commune_enregistrement',
-            'utilisateur',
-        ).prefetch_related('temoins').order_by('-date_creation')
-        qs = filtrer_dossiers_par_acces(self.request.user, qs)
-        qs = appliquer_filtres_dossier(qs, params)
-        if not filtres_actifs(params):
-            qs = qs[:self.limite_defaut]
-        return qs
+        return queryset_dossiers_liste(
+            self.request.user, params, limite_defaut=self.limite_defaut
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -392,6 +480,37 @@ class DossierListView(SmartSecurityMixin, ListView):
             self.request, params, 'dossier', self.limite_defaut, self.request.user
         ))
         return context
+
+
+class DossierListeRechercheAPIView(SmartSecurityMixin, View):
+    """Recherche progressive (nom, n° dossier) pour la liste des dossiers."""
+
+    allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
+    limite_defaut = 10
+    limite_filtre = 50
+
+    def get(self, request):
+        params = lire_parametres_filtre(request)
+        dossiers = list(queryset_dossiers_liste(
+            request.user,
+            params,
+            limite_defaut=self.limite_defaut,
+            limite_filtre=self.limite_filtre,
+        ))
+        html = render_to_string(
+            'mariage/partials/dossier_list_rows.html',
+            {'dossiers': dossiers},
+            request=request,
+        )
+        ctx = contexte_filtres_liste(
+            request, params, 'dossier', self.limite_defaut, request.user
+        )
+        return JsonResponse({
+            'success': True,
+            'html': html,
+            'count': len(dossiers),
+            'sous_titre': ctx['sous_titre_liste'],
+        })
 
 
 class DossierVerificationAntiPolygamieAPIView(LoginRequiredMixin, View):
@@ -414,17 +533,41 @@ class DossierVerificationAntiPolygamieAPIView(LoginRequiredMixin, View):
 
         etat = lire_etat_verif(request.session)
 
+        if role == 'epouse' and not etat.get('epoux_ok'):
+            return JsonResponse(
+                {
+                    'success': False,
+                    'errors': {
+                        'role': [
+                            'Étape 1/2 : vous devez d\'abord vérifier le futur époux '
+                            'avant la future épouse.',
+                        ],
+                    },
+                },
+                status=400,
+            )
+
         try:
             if type_verif == 'empreinte':
                 fichier = request.FILES.get('scan_empreinte')
                 resultat = verifier_empreinte(role, fichier)
             elif type_verif == 'nominative':
-                resultat = verifier_nominatif(
-                    role,
-                    request.POST.get('nom'),
-                    request.POST.get('postnom'),
-                    request.POST.get('prenom'),
-                )
+                personne_id = request.POST.get('personne_id')
+                if personne_id:
+                    from .verification_dossier import verifier_nominatif_selection
+                    resultat = verifier_nominatif_selection(
+                        role,
+                        int(personne_id),
+                        request.POST.get('est_epoux') == '1',
+                        request.POST.get('est_profil_citoyen') == '1',
+                    )
+                else:
+                    resultat = verifier_nominatif(
+                        role,
+                        request.POST.get('nom'),
+                        request.POST.get('postnom'),
+                        request.POST.get('prenom'),
+                    )
             else:
                 resultat = verifier_facial(role, request.POST.get('image_base64'))
 
@@ -482,8 +625,8 @@ class DossierCreateView(SmartSecurityMixin, View):
             'verif_etat': etat_verif,
             'empreinte_epoux_valide': etat_verif.get('empreinte_epoux', ''),
             'empreinte_epouse_valide': etat_verif.get('empreinte_epouse', ''),
-            'prefill_epoux': _identite_prefill(etat_verif.get('identite_epoux')),
-            'prefill_epouse': _identite_prefill(etat_verif.get('identite_epouse')),
+            'prefill_epoux': _prefill_depuis_profil_citoyen(etat_verif.get('identite_epoux')),
+            'prefill_epouse': _prefill_depuis_profil_citoyen(etat_verif.get('identite_epouse')),
             'verif_type': etat_verif.get('type'),
             'is_edit': False,
         }
@@ -491,7 +634,28 @@ class DossierCreateView(SmartSecurityMixin, View):
     def get(self, request, *args, **kwargs):
         commune_agent = _commune_agent_utilisateur(request.user)
 
-        etat_verif = lire_etat_verif(request.session)
+        # « Nouveau dossier » : toujours repartir de la vérification anti-polygamie.
+        # Seul le passage automatique après validation (verif_ok=1) ouvre le formulaire.
+        if request.GET.get('verif_ok') == '1':
+            etat_verif = lire_etat_verif(request.session)
+            if not verif_complete(etat_verif):
+                messages.warning(
+                    request,
+                    'La vérification anti-polygamie est incomplète ou a expiré. '
+                    'Veuillez valider à nouveau l\'époux puis l\'épouse.',
+                )
+                reinitialiser_verif(request.session)
+                etat_verif = lire_etat_verif(request.session)
+            else:
+                messages.success(
+                    request,
+                    'Vérification anti-polygamie réussie : époux et épouse sans mariage actif. '
+                    'Vous pouvez enregistrer le nouveau dossier.',
+                )
+        else:
+            reinitialiser_verif(request.session)
+            etat_verif = lire_etat_verif(request.session)
+
         context = self._contexte_formulaire(request, commune_agent, etat_verif)
         return render(request, self.template_name, context)
 
@@ -502,6 +666,14 @@ class DossierCreateView(SmartSecurityMixin, View):
         if 'reinitialiser_verification' in request.POST:
             reinitialiser_verif(request.session)
             messages.info(request, "Vérification anti-polygamie réinitialisée.")
+            return redirect('dossier_create')
+
+        if 'reinitialiser_epoux' in request.POST:
+            reinitialiser_epoux_verif(request.session)
+            messages.info(
+                request,
+                "Validation de l'époux annulée — vous pouvez saisir à nouveau le futur époux.",
+            )
             return redirect('dossier_create')
 
         if not verif_complete(etat_verif):
@@ -524,6 +696,19 @@ class DossierCreateView(SmartSecurityMixin, View):
             if erreurs_photo:
                 for msg in erreurs_photo:
                     messages.error(request, msg)
+                context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                return render(request, self.template_name, context)
+
+            date_depot = parse_date((request.POST.get('date_depot') or '').strip())
+            if not date_depot:
+                messages.error(
+                    request,
+                    "La date de dépôt du dossier est obligatoire (indiquez le jour où le dossier a été déposé au guichet).",
+                )
+                context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                return render(request, self.template_name, context)
+            if date_depot > timezone.now().date():
+                messages.error(request, "La date de dépôt ne peut pas être postérieure à aujourd'hui.")
                 context = self._contexte_formulaire(request, commune_agent, etat_verif)
                 return render(request, self.template_name, context)
 
@@ -557,6 +742,7 @@ class DossierCreateView(SmartSecurityMixin, View):
                         empreinte_digitale=empreinte_obj_epoux
                     )
                     _maj_conjoint_modification(epoux, 'e', request.POST, fichiers)
+                    _attacher_reconnaissance_faciale(epoux, fichiers.get('e_photo'))
 
                     # --- BLOC 2 : L'ÉPOUSE ---
                     epouse = Epouse.objects.create(
@@ -571,6 +757,7 @@ class DossierCreateView(SmartSecurityMixin, View):
                         empreinte_digitale=empreinte_obj_epouse
                     )
                     _maj_conjoint_modification(epouse, 'f', request.POST, fichiers)
+                    _attacher_reconnaissance_faciale(epouse, fichiers.get('f_photo'))
 
                     # --- BLOC 3 : LE DOSSIER (SÉCURISÉ CONTRE LES DOUBLONS) ---
                     # 1. On récupère le numéro s'il vient du formulaire
@@ -588,7 +775,9 @@ class DossierCreateView(SmartSecurityMixin, View):
                         epouse=epouse,
                         commune_enregistrement=commune_agent,
                         utilisateur=request.user,
-                        statut='ouvert'
+                        date_depot=date_depot,
+                        objet=request.POST.get('objet', 'mariage civil') or 'mariage civil',
+                        statut='en_cours',
                     )
 
                     # --- BLOC 4 : LES TÉMOINS (DEVENUS ENTIÈREMENT OPTIONNELS) ---
@@ -700,7 +889,8 @@ class TemoinCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
 # MARIAGE
 # =================================
 
-class MariageListView(LoginRequiredMixin, ListView):
+class MariageListView(SmartSecurityMixin, ListView):
+    allowed_roles = ['OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
     model = Mariage
     template_name = 'mariage/mariages/mariage_list.html'
     context_object_name = 'mariages'
@@ -1086,7 +1276,7 @@ class MariageUpdateView(SmartSecurityMixin, AjaxFormMixin, UpdateView):
 # ==========================================
 
 class DivorceListView(SmartSecurityMixin, ListView):
-    allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE']
+    allowed_roles = ['OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
     model = Divorce
     template_name = 'mariage/divorces/divorce_list.html'
     context_object_name = 'divorces'
@@ -1658,9 +1848,9 @@ def dossier_edit_view(request, pk):
 
                 dossier.objet = request.POST.get('objet', dossier.objet) or 'mariage civil'
                 dossier.statut = request.POST.get('statut', dossier.statut)
-                date_depot = request.POST.get('date_depot')
-                if date_depot:
-                    dossier.date_depot = date_depot
+                date_depot_parsed = parse_date((request.POST.get('date_depot') or '').strip())
+                if date_depot_parsed:
+                    dossier.date_depot = date_depot_parsed
                 dossier.save()
 
                 _maj_temoin_modification(dossier, 'EPOUX', request.POST, request.FILES, 1)

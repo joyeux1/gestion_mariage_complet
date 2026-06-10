@@ -1,0 +1,20 @@
+{% extends 'mariage/base.html' %}
+{% block title %}Mon profil civil{% endblock %}
+{% block content %}
+<h2 class="fw-bold mb-4">Enregistrer mon profil civil</h2>
+<p class="text-muted">Ces informations prérempliront votre dossier le jour du mariage.</p>
+<form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm">
+    <div class="card-body row g-3">
+        {% csrf_token %}
+        <div class="col-md-4"><label class="form-label">Nom *</label><input type="text" name="nom" class="form-control" required value="{{ profil.nom }}"></div>
+        <div class="col-md-4"><label class="form-label">Postnom</label><input type="text" name="post_nom" class="form-control" value="{{ profil.post_nom }}"></div>
+        <div class="col-md-4"><label class="form-label">Prénom</label><input type="text" name="prenom" class="form-control" value="{{ profil.prenom }}"></div>
+        <div class="col-md-4"><label class="form-label">Téléphone</label><input type="tel" name="telephone" class="form-control" value="{{ profil.telephone }}"></div>
+        <div class="col-md-4"><label class="form-label">N° pièce d'identité</label><input type="text" name="numero_piece" class="form-control" value="{{ profil.numero_piece }}"></div>
+        <div class="col-md-4"><label class="form-label">Date naissance</label><input type="date" name="date_naissance" class="form-control" value="{{ profil.date_naissance|date:'Y-m-d' }}"></div>
+        <div class="col-md-4"><label class="form-label">Sexe</label><select name="sexe" class="form-select"><option value="">—</option><option value="M" {% if profil.sexe == 'M' %}selected{% endif %}>Masculin</option><option value="F" {% if profil.sexe == 'F' %}selected{% endif %}>Féminin</option></select></div>
+        <div class="col-md-4"><label class="form-label">Photo</label><input type="file" name="photo" class="form-control" accept="image/*"></div>
+        <div class="col-12"><button type="submit" class="btn btn-primary">Enregistrer</button></div>
+    </div>
+</form>
+{% endblock %}

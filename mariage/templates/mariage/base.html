@@ -12,8 +12,9 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{% url 'dashboard' %}"><i class="bi bi-bank2 me-2"></i> ÉTAT CIVIL</a>
+            <a class="navbar-brand fw-bold" href="{% if url_accueil_user %}{{ url_accueil_user }}{% else %}{% url 'dashboard' %}{% endif %}"><i class="bi bi-bank2 me-2"></i> ÉTAT CIVIL</a>
             
+            {% if role_utilisateur_court != 'CITOYEN' and role_utilisateur_court != 'CONJOINT' %}
             <form class="d-flex ms-auto me-3 d-print-none" action="{% url 'quick_search' %}" method="get" style="max-width: 300px;">
                 <div class="input-group input-group-sm">
                     <input type="text" name="q" class="form-control border-light" placeholder="Rechercher N° Acte..." aria-label="Rechercher">
@@ -22,6 +23,7 @@
                     </button>
                 </div>
             </form>
+            {% endif %}
 
             <div class="d-flex align-items-center text-white small">
                 <span>Bienvenue, <strong>{{ user.username }}</strong></span>
@@ -37,39 +39,23 @@
         <div class="row">
             <nav class="col-md-2 d-none d-md-block sidebar">
                 <ul class="nav flex-column">
+                    {% for item in menu_items %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
-                            <i class="bi bi-speedometer2 me-2"></i> Tableau de bord
+                        <a class="nav-link {% for key in item.active_keys %}{% if key in request.resolver_match.url_name %}active{% endif %}{% endfor %}{% if item.url_name == 'bourgmestre_dashboard' and 'bourgmestre' in request.resolver_match.url_name %} active{% endif %}"
+                           href="{% url item.url_name %}">
+                            <i class="bi {{ item.icon }} me-2"></i> {{ item.label }}
                         </a>
                     </li>
+                    {% empty %}
                     <li class="nav-item">
-                        <a class="nav-link {% if 'dossier' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'dossier_list' %}">
-                            <i class="bi bi-folder-fill me-2"></i> Dossiers
-                        </a>
+                        <a class="nav-link" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Accueil</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'mariage' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'mariage_list' %}">
-                            <i class="bi bi-heart-fill me-2"></i> Mariage
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if 'divorce' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'divorce_list' %}">
-                            <i class="bi bi-heartbreak-fill me-2"></i> Divorce
-                        </a>
-                    </li>
-
-                    {% if user.is_superuser or user.role|upper == 'HIERARCHIE' or user.role|upper == 'MAIRE' or user.role|upper == 'BOURGMESTRE' or user.role|upper == 'OFFICIER' or user.role|upper == 'OPERATEUR' %}
-                        <li class="nav-item">
-                            <a class="nav-link text-warning {% if 'bourgmestre' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'bourgmestre_dashboard' %}">
-                                <i class="bi bi-cash-coin me-2"></i> Caisse de la commune pour les frais du mariage
-                            </a>
-                        </li>
-                    {% endif %}
+                    {% endfor %}
 
                     {% if user.is_superuser %}
                         <li class="nav-item mt-2">
                             <a class="nav-link text-danger fw-bold" href="/admin/" target="_blank">
-                                <i class="bi bi-sliders me-2"></i> Autres
+                                <i class="bi bi-sliders me-2"></i> Administration
                             </a>
                         </li>
                     {% endif %}

@@ -2,6 +2,7 @@
 from django.db.models import Q
 
 from .models import Commune, Dossier, Mariage
+from .permissions_commune import filtrer_dossiers_par_acces
 
 
 def lire_parametres_filtre(request):
@@ -46,6 +47,25 @@ def appliquer_filtres_dossier(qs, params):
     return qs.distinct()
 
 
+def queryset_dossiers_liste(user, params, limite_defaut=10, limite_filtre=50):
+    """Dossiers visibles pour l'utilisateur, avec filtres et limite adaptée."""
+    qs = Dossier.objects.select_related(
+        'epoux',
+        'epouse',
+        'epoux__reconnaissance_faciale',
+        'epouse__reconnaissance_faciale',
+        'commune_enregistrement',
+        'utilisateur',
+    ).prefetch_related('temoins').order_by('-date_creation')
+    qs = filtrer_dossiers_par_acces(user, qs)
+    qs = appliquer_filtres_dossier(qs, params)
+    if filtres_actifs(params):
+        qs = qs[:limite_filtre]
+    else:
+        qs = qs[:limite_defaut]
+    return qs
+
+
 def filtrer_mariages_par_acces(user, queryset=None):
     if queryset is None:
         queryset = Mariage.objects.all()
@@ -55,11 +75,11 @@ def filtrer_mariages_par_acces(user, queryset=None):
     if acces_toutes_communes(user):
         return queryset
     if role == 'MAIRE':
-        if not user.commune_id:
+        from .role_permissions import ville_utilisateur
+        ville = ville_utilisateur(user)
+        if not ville:
             return queryset.none()
-        return queryset.filter(
-            dossier__commune_enregistrement__ville_id=user.commune.ville_id
-        )
+        return queryset.filter(dossier__commune_enregistrement__ville=ville)
     if user.commune_id:
         return queryset.filter(
             dossier__commune_enregistrement_id=user.commune_id
@@ -115,7 +135,7 @@ def appliquer_filtres_divorce(qs, params):
 
 def contexte_filtres_liste(request, params, type_liste, limite_defaut, user=None):
     """Contexte template pour la barre de filtres."""
-    from .permissions_commune import acces_toutes_communes
+    from .permissions_commune import acces_toutes_communes, role_utilisateur
 
     actifs = filtres_actifs(params)
     ctx = {
@@ -140,6 +160,10 @@ def contexte_filtres_liste(request, params, type_liste, limite_defaut, user=None
 
     if user and user.commune_id:
         ctx['filtre_commune_label'] = f"Commune : {user.commune.nom}"
+    elif user and role_utilisateur(user) == 'MAIRE':
+        from .role_permissions import ville_utilisateur
+        ville = ville_utilisateur(user)
+        ctx['filtre_commune_label'] = f"Ville : {ville.nom}" if ville else 'Ville non configurée'
     elif user and acces_toutes_communes(user):
         ctx['filtre_commune_label'] = 'Toutes les communes'
     else:

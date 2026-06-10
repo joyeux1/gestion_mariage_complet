@@ -1,9 +1,24 @@
 from django.urls import path
 from django.views.generic import RedirectView
 from . import views
+from . import portal_views
 from .views import BourgmestreDashboardView, DossierSyntheseView, QuickSearchView
 
 urlpatterns = [
+    path('accueil/', portal_views.AccueilRedirectView.as_view(), name='accueil'),
+    path('portail/maire/', portal_views.DashboardMaireView.as_view(), name='dashboard_maire'),
+    path('portail/hierarchie/', portal_views.DashboardHierarchieView.as_view(), name='dashboard_hierarchie'),
+    path('portail/conjoint/', portal_views.PortalConjointView.as_view(), name='portal_conjoint'),
+    path('portail/citoyen/', portal_views.PortalCitoyenView.as_view(), name='portal_citoyen'),
+    path('portail/citoyen/profil/', portal_views.ProfilCitoyenEditView.as_view(), name='profil_citoyen_edit'),
+    path('api/recherche-nominative/', portal_views.RecherchePersonnesNominativeAPIView.as_view(), name='recherche_nominative'),
+    path('api/capture-mobile/creer/', portal_views.SessionCaptureMobileCreateAPIView.as_view(), name='mobile_capture_creer'),
+    path('api/capture-mobile/tunnel/', portal_views.SessionCaptureMobileTunnelAPIView.as_view(), name='mobile_capture_tunnel'),
+    path('api/capture-mobile/<str:token>/statut/', portal_views.SessionCaptureMobileStatutAPIView.as_view(), name='mobile_capture_statut'),
+    path('local/', portal_views.SessionCaptureMobileLocalView.as_view(), name='mobile_capture_local'),
+    path('local/sante/', portal_views.SessionCaptureMobileSanteView.as_view(), name='mobile_capture_sante'),
+    path('capture/<str:token>/', portal_views.SessionCaptureMobilePageView.as_view(), name='mobile_capture_page'),
+
     # ====================
     # DASHBOARD
     # ====================
@@ -32,6 +47,7 @@ urlpatterns = [
     # 3. GESTION DES DOSSIERS
     # ==========================
     path('dossiers/', views.DossierListView.as_view(), name='dossier_list'),
+    path('dossiers/api/recherche-liste/', views.DossierListeRechercheAPIView.as_view(), name='dossier_liste_recherche'),
     path('dossiers/nouveau/', views.DossierCreateView.as_view(), name='dossier_create'),
     path('dossiers/api/verifier-conjoint/', views.DossierVerificationAntiPolygamieAPIView.as_view(), name='dossier_verifier_conjoint'),
     path('dossiers/document/nouveau/', views.DocumentCreateView.as_view(), name='document_create'),

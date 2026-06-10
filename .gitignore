@@ -6,3 +6,4 @@ environnement_virtuel_py313/
 __pycache__/
 *.pyc/
 *.env/
+tunnel_url.txt

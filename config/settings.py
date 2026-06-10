@@ -12,10 +12,28 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _hosts_autorises():
+    """Hôtes valides : local, LAN, tunnel Cloudflare."""
+    hosts = [
+        '127.0.0.1',
+        'localhost',
+        'gestion-mariage',
+        '.trycloudflare.com',
+    ]
+    try:
+        from mariage.capture_mobile import detecter_ip_lan
+        ip = detecter_ip_lan()
+        if ip:
+            hosts.append(ip)
+    except Exception:
+        pass
+    return hosts
+
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -25,9 +43,14 @@ SECRET_KEY = 'django-insecure-di9e%h+y#q#f^dpo&y5#u+q9wlng4r2h$p6=c8k43njfxz@rob
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = _hosts_autorises() if DEBUG else ['127.0.0.1', 'localhost', 'gestion-mariage']
 
-LOGIN_REDIRECT_URL = '/'
+# Capture mobile : 'auto' = IP Wi‑Fi du PC ; ou URL fixe ex. http://192.168.1.167:8000
+CAPTURE_MOBILE_SHORT_BASE_URL = 'auto'
+CAPTURE_MOBILE_PORT = 8000
+CAPTURE_MOBILE_EXPIRE_MINUTES = 15
+
+LOGIN_REDIRECT_URL = '/accueil/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 
@@ -68,6 +91,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'mariage.context_processors.navigation_role',
             ],
         },
     },
