@@ -42,6 +42,7 @@ from .permissions_commune import (
     commune_caisse_active,
     filtrer_dossiers_par_acces,
 )
+from .roles import ROLES_ACCES_NATIONAL, ROLES_ACCES_PROVINCE
 from .verification_dossier import _mariage_actif_pour_conjoint
 from .role_permissions import (
     communes_perimetre_maire,
@@ -93,12 +94,13 @@ class DashboardMaireView(LoginRequiredMixin, TemplateView):
         return ctx
 
 
-class DashboardHierarchieView(LoginRequiredMixin, TemplateView):
-    template_name = 'mariage/portail/dashboard_hierarchie.html'
+class DashboardAutoriteNationaleView(LoginRequiredMixin, TemplateView):
+    template_name = 'mariage/portail/dashboard_autorite_nationale.html'
 
     def dispatch(self, request, *args, **kwargs):
-        if role_utilisateur(request.user) not in ('HIERARCHIE',) and not request.user.is_superuser:
-            messages.error(request, 'Accès réservé à la hiérarchie.')
+        role = role_utilisateur(request.user)
+        if role not in ROLES_ACCES_NATIONAL and not request.user.is_superuser:
+            messages.error(request, 'Accès réservé aux autorités nationales.')
             return redirect('dashboard')
         return super().dispatch(request, *args, **kwargs)
 
@@ -109,6 +111,35 @@ class DashboardHierarchieView(LoginRequiredMixin, TemplateView):
         ctx['communes'] = Commune.objects.select_related('ville__province').order_by('ville__nom', 'nom')
         ctx['nb_communes'] = ctx['communes'].count()
         return ctx
+
+
+class DashboardGouverneurView(LoginRequiredMixin, TemplateView):
+    template_name = 'mariage/portail/dashboard_gouverneur.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        role = role_utilisateur(request.user)
+        if role not in ROLES_ACCES_PROVINCE and not request.user.is_superuser:
+            messages.error(request, 'Accès réservé au Gouverneur et à son Agent.')
+            return redirect('dashboard')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        user = self.request.user
+        province = getattr(user, 'province_affectation', None)
+        stats = stats_dashboard_general(user)
+        ctx.update(stats)
+        ctx['province'] = province
+        ctx['communes'] = communes_accessibles(user)
+        ctx['nb_communes'] = ctx['communes'].count()
+        return ctx
+
+
+class DashboardHierarchieView(DashboardAutoriteNationaleView):
+    """Alias de compatibilité — redirige vers le portail autorité nationale."""
+
+    def dispatch(self, request, *args, **kwargs):
+        return redirect('dashboard_autorite_nationale')
 
 
 class PortalConjointView(LoginRequiredMixin, TemplateView):

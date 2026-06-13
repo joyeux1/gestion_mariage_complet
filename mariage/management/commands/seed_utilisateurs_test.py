@@ -1,7 +1,7 @@
 """Crée un utilisateur de test par rôle (mot de passe : test1234)."""
 from django.core.management.base import BaseCommand
 
-from mariage.models import Commune, Mariage, Utilisateur, Ville
+from mariage.models import Commune, Mariage, Province, Utilisateur, Ville
 from mariage.role_permissions import mairie_commune_ville
 
 
@@ -74,12 +74,23 @@ class Command(BaseCommand):
                 'affecte_mairie': False,
             },
             {
-                'username': 'test_hierarchie',
-                'first_name': 'Hiérarchie',
+                'username': 'test_president',
+                'first_name': 'Président',
                 'last_name': 'Test',
-                'role': 'hierarchie',
+                'role': 'president',
                 'commune': None,
                 'ville': None,
+                'province_affectation': None,
+                'affecte_mairie': False,
+            },
+            {
+                'username': 'test_gouverneur',
+                'first_name': 'Gouverneur',
+                'last_name': 'Test',
+                'role': 'gouverneur',
+                'commune': None,
+                'ville': None,
+                'province_affectation': ville.province,
                 'affecte_mairie': False,
             },
             {
@@ -149,6 +160,7 @@ class Command(BaseCommand):
                 'role': spec['role'],
                 'commune': spec.get('commune'),
                 'ville': spec.get('ville'),
+                'province_affectation': spec.get('province_affectation'),
                 'affecte_mairie': spec.get('affecte_mairie', False),
                 'is_staff': False,
                 'is_superuser': False,
@@ -177,6 +189,8 @@ class Command(BaseCommand):
             extra = ''
             if spec.get('affecte_mairie'):
                 extra = ' (mairie)'
+            elif spec.get('province_affectation'):
+                extra = f' (province {spec["province_affectation"].nom})'
             elif spec.get('ville'):
                 extra = f' (ville {spec["ville"].nom})'
             elif spec.get('commune'):

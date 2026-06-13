@@ -1,6 +1,7 @@
 """Vérification anti-polygamie stricte lors de l'ouverture d'un dossier."""
 import base64
 import hashlib
+import json
 
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
@@ -218,7 +219,24 @@ def _catalogue_encodages_faciaux(role):
     return candidats
 
 
-def _encodage_facial_conjoint(conjoint):
+def _persister_encodage_facial_conjoint(conjoint, encodage):
+    """Enregistre l'encodage en base pour éviter de recalculer à chaque vérification."""
+    if conjoint is None or encodage is None:
+        return
+    from .models import ReconnaissanceFaciale
+
+    enc_json = json.loads(ReconnaissanceFacialeService.encoder_json(encodage))
+    rf = getattr(conjoint, 'reconnaissance_faciale', None)
+    if rf:
+        if not rf.encodage_facial:
+            rf.encodage_facial = enc_json
+            rf.save(update_fields=['encodage_facial'])
+        return
+    rf = ReconnaissanceFaciale.objects.create(encodage_facial=enc_json)
+    type(conjoint).objects.filter(pk=conjoint.pk).update(reconnaissance_faciale=rf)
+
+
+def _encodage_facial_conjoint(conjoint, persister=True):
     if not conjoint:
         return None
     rf = getattr(conjoint, 'reconnaissance_faciale', None)
@@ -229,7 +247,10 @@ def _encodage_facial_conjoint(conjoint):
         return None
     try:
         with default_storage.open(img.name, 'rb') as fichier:
-            return ReconnaissanceFacialeService.extraire_encodage_facial(fichier)
+            enc = ReconnaissanceFacialeService.extraire_encodage_facial(fichier)
+        if persister and enc is not None:
+            _persister_encodage_facial_conjoint(conjoint, enc)
+        return enc
     except ValidationError:
         return None
 

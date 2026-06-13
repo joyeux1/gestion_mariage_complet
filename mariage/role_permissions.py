@@ -1,6 +1,12 @@
 """Permissions, menus et redirections selon le rôle utilisateur."""
 from django.urls import reverse
 
+from .roles import (
+    ROLES_ACCES_NATIONAL,
+    ROLES_ACCES_PROVINCE,
+    role_utilisateur_upper,
+)
+
 ROLES_PORTAIL_PUBLIC = ('CONJOINT', 'CITOYEN')
 ROLES_AGENT_COMMUNE = ('OPERATEUR', 'OFFICIER', 'BOURGMESTRE')
 ROLES_AGENT_MAIRIE = ('OPERATEUR', 'OFFICIER')  # avec affecte_mairie=True
@@ -10,8 +16,8 @@ def role_utilisateur(user):
     if not user or not user.is_authenticated:
         return ''
     if user.is_superuser:
-        return 'HIERARCHIE'
-    return (getattr(user, 'role', None) or '').upper()
+        return 'PRESIDENT'
+    return role_utilisateur_upper(user)
 
 
 def est_portail_public(user):
@@ -23,11 +29,14 @@ def url_accueil_utilisateur(user):
     role = role_utilisateur(user)
     mapping = {
         'MAIRE': 'dashboard_maire',
-        'HIERARCHIE': 'dashboard_hierarchie',
         'CONJOINT': 'portal_conjoint',
         'CITOYEN': 'portal_citoyen',
         'OPERATEUR': 'dossier_list',
+        'GOUVERNEUR': 'dashboard_gouverneur',
+        'AGENT_GOUVERNEUR': 'dashboard_gouverneur',
     }
+    if role in ROLES_ACCES_NATIONAL:
+        mapping[role] = 'dashboard_autorite_nationale'
     name = mapping.get(role, 'dashboard')
     try:
         return reverse(name)
@@ -42,6 +51,38 @@ def _item(url_name, label, icon, active_keys=None):
         'icon': icon,
         'active_keys': active_keys or [url_name],
     }
+
+
+def _menu_autorite_nationale():
+    return [
+        _item(
+            'dashboard_autorite_nationale',
+            'Tableau de bord — Autorité nationale',
+            'bi-globe2',
+            ['dashboard_autorite_nationale'],
+        ),
+        _item('dossier_list', 'Dossiers', 'bi-folder-fill', ['dossier']),
+        _item('mariage_list', 'Mariages', 'bi-heart-fill', ['mariage']),
+        _item('divorce_list', 'Divorces', 'bi-heartbreak-fill', ['divorce']),
+        _item('bourgmestre_dashboard', 'Caisses (toutes communes)', 'bi-cash-coin', ['bourgmestre']),
+        _item('gestion_quittance_parcellaire:quittance_list', 'Quittances parcellaires', 'bi-receipt', ['quittance']),
+    ]
+
+
+def _menu_autorite_provinciale():
+    return [
+        _item(
+            'dashboard_gouverneur',
+            'Tableau de bord — Gouverneur',
+            'bi-geo-alt',
+            ['dashboard_gouverneur'],
+        ),
+        _item('dossier_list', 'Dossiers (province)', 'bi-folder-fill', ['dossier']),
+        _item('mariage_list', 'Mariages (province)', 'bi-heart-fill', ['mariage']),
+        _item('divorce_list', 'Divorces (province)', 'bi-heartbreak-fill', ['divorce']),
+        _item('bourgmestre_dashboard', 'Caisses (province)', 'bi-cash-coin', ['bourgmestre']),
+        _item('gestion_quittance_parcellaire:quittance_list', 'Quittances parcellaires', 'bi-receipt', ['quittance']),
+    ]
 
 
 def menu_navigation(user):
@@ -71,14 +112,11 @@ def menu_navigation(user):
             _item('bourgmestre_dashboard', 'Caisses communales', 'bi-cash-coin', ['bourgmestre']),
         ]
 
-    if role == 'HIERARCHIE':
-        return [
-            _item('dashboard_hierarchie', 'Tableau de bord — Hiérarchie', 'bi-globe2', ['dashboard_hierarchie']),
-            _item('dossier_list', 'Dossiers', 'bi-folder-fill', ['dossier']),
-            _item('mariage_list', 'Mariages', 'bi-heart-fill', ['mariage']),
-            _item('divorce_list', 'Divorces', 'bi-heartbreak-fill', ['divorce']),
-            _item('bourgmestre_dashboard', 'Caisses (toutes communes)', 'bi-cash-coin', ['bourgmestre']),
-        ]
+    if role in ROLES_ACCES_NATIONAL:
+        return _menu_autorite_nationale()
+
+    if role in ROLES_ACCES_PROVINCE:
+        return _menu_autorite_provinciale()
 
     if role == 'OPERATEUR':
         return [

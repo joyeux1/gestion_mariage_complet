@@ -13,8 +13,10 @@ def _import_face_recognition():
         return face_recognition
     except ImportError as exc:
         raise ValidationError(
-            "Le module face_recognition n'est pas installé. "
-            "Activez l'environnement virtuel puis exécutez : pip install -r requirements.txt"
+            "Le module face_recognition n'est pas installé ou incompatible. "
+            "Utilisez Python 3.12 (pas 3.14), activez l'environnement virtuel "
+            "« environnement_virtuel », puis exécutez : pip install -r requirements.txt "
+            "(sous Windows : dlib-bin remplace dlib, sans compilateur C++)."
         ) from exc
 
 
@@ -40,6 +42,30 @@ class ReconnaissanceFacialeService:
 
     DISTANCE_TOLERANCE = 0.6
     MODEL = 'hog'
+    MAX_IMAGE_SIDE = 640
+
+    @staticmethod
+    def _redimensionner_pil(pil):
+        """Réduit les grandes images avant détection (HOG est coûteux)."""
+        from PIL import Image
+        w, h = pil.size
+        limite = ReconnaissanceFacialeService.MAX_IMAGE_SIDE
+        if max(w, h) <= limite:
+            return pil
+        echelle = limite / max(w, h)
+        return pil.resize(
+            (int(w * echelle), int(h * echelle)),
+            Image.Resampling.LANCZOS,
+        )
+
+    @staticmethod
+    def _pil_vers_rgb_numpy(pil):
+        np = _import_numpy()
+        from PIL import ImageOps
+        pil = ImageOps.exif_transpose(pil)
+        pil = pil.convert('RGB')
+        pil = ReconnaissanceFacialeService._redimensionner_pil(pil)
+        return np.ascontiguousarray(np.asarray(pil), dtype=np.uint8)
 
     @staticmethod
     def _verifier_compatibilite_numpy():
@@ -56,18 +82,14 @@ class ReconnaissanceFacialeService:
     def _charger_image_rgb(image_source):
         """Charge une image en tableau numpy RGB uint8 (compatible dlib)."""
         ReconnaissanceFacialeService._verifier_compatibilite_numpy()
-        np = _import_numpy()
-        face_recognition = _import_face_recognition()
         try:
-            from PIL import Image, ImageOps
+            from PIL import Image
         except ImportError as exc:
             raise ValidationError(
                 "Le module Pillow n'est pas installé. Exécutez : pip install Pillow"
             ) from exc
 
         import io
-        import os
-        import tempfile
 
         if hasattr(image_source, 'read'):
             image_source.seek(0)
@@ -77,30 +99,23 @@ class ReconnaissanceFacialeService:
                 raise ValidationError("Fichier image vide.")
             try:
                 pil = Image.open(io.BytesIO(raw))
-                pil = ImageOps.exif_transpose(pil)
-                pil = pil.convert('RGB')
-                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
-                    pil.save(tmp, format='JPEG', quality=95)
-                    tmp_path = tmp.name
-                try:
-                    image = face_recognition.load_image_file(tmp_path)
-                finally:
-                    os.unlink(tmp_path)
+                return ReconnaissanceFacialeService._pil_vers_rgb_numpy(pil)
             except ValidationError:
                 raise
             except Exception as exc:
                 raise ValidationError(f"Image illisible : {exc}") from exc
-        else:
-            image = face_recognition.load_image_file(str(image_source))
-
-        return np.ascontiguousarray(image, dtype=np.uint8)
+        try:
+            pil = Image.open(str(image_source))
+            return ReconnaissanceFacialeService._pil_vers_rgb_numpy(pil)
+        except Exception as exc:
+            raise ValidationError(f"Image illisible : {exc}") from exc
 
     @staticmethod
     def _localiser_visages(image, face_recognition):
-        """Détection robuste (upsampling + agrandissement si image petite)."""
+        """Détection rapide : upsample léger, agrandissement si image petite."""
         np = _import_numpy()
 
-        for upsample in (2, 1, 3):
+        for upsample in (1, 2):
             locations = face_recognition.face_locations(
                 image,
                 model=ReconnaissanceFacialeService.MODEL,
@@ -110,24 +125,23 @@ class ReconnaissanceFacialeService:
                 return locations, image
 
         h, w = image.shape[:2]
-        if max(h, w) < 600:
+        if max(h, w) < 480:
             try:
                 import cv2
-                scale = 600 / max(h, w)
+                scale = 480 / max(h, w)
                 resized = cv2.resize(
                     image,
                     (int(w * scale), int(h * scale)),
-                    interpolation=cv2.INTER_CUBIC,
+                    interpolation=cv2.INTER_LINEAR,
                 )
                 resized = np.ascontiguousarray(resized, dtype=np.uint8)
-                for upsample in (2, 3):
-                    locations = face_recognition.face_locations(
-                        resized,
-                        model=ReconnaissanceFacialeService.MODEL,
-                        number_of_times_to_upsample=upsample,
-                    )
-                    if locations:
-                        return locations, resized
+                locations = face_recognition.face_locations(
+                    resized,
+                    model=ReconnaissanceFacialeService.MODEL,
+                    number_of_times_to_upsample=1,
+                )
+                if locations:
+                    return locations, resized
             except ImportError:
                 pass
 

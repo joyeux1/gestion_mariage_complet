@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     # code ajoutee: nom de l'application
     # ===================================
     'mariage',
+    'gestion_quittance_parcellaire',
 ]
 
 MIDDLEWARE = [
@@ -105,8 +106,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'gestion_mariage_et_quittance_parcellaire',
+        'USER': 'postgres',
+        'PASSWORD': 'test1234',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
@@ -152,3 +157,4 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 AUTH_USER_MODEL = 'mariage.Utilisateur'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -64,7 +64,16 @@
             </nav>
 
             <main class="col-md-10 ms-sm-auto px-md-4 py-4 main-content">
-                <div id="toast-container" class="position-fixed top-0 end-0 p-3"></div>
+                <div id="toast-container" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+                    {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show shadow" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
                 {% block content %}{% endblock %}
             </main>
         </div>

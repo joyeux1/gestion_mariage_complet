@@ -32,6 +32,7 @@ urlpatterns = [
 
 
     path('', include('mariage.urls')),
+    path('quittances/', include('gestion_quittance_parcellaire.urls')),
 
 ]
 

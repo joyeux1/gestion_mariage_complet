@@ -358,6 +358,17 @@
         </div>
     </div>
 
+    {% elif not is_edit and choix_commune_requis %}
+    <div class="alert alert-warning border-0 shadow-sm mb-4">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>Commune d'enregistrement requise</strong> — en tant que super-utilisateur, choisissez la commune du guichet :
+        <select name="commune_enregistrement_id" form="form-dossier-edit" class="form-select form-select-sm d-inline-block w-auto ms-2" required>
+            <option value="">— Choisir —</option>
+            {% for c in communes %}
+            <option value="{{ c.id }}">{{ c.nom }} ({{ c.ville.nom }})</option>
+            {% endfor %}
+        </select>
+    </div>
     {% elif not is_edit %}
     <div class="alert alert-success border-0 shadow-sm d-flex justify-content-between align-items-center mb-4">
         <div>

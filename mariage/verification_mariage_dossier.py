@@ -228,6 +228,16 @@ def verifier_facial(user, role, image_base64, etat):
         })
 
     if not catalogue:
+        if role == 'epoux':
+            etat['epoux_ok'] = True
+            return {
+                'ok': True,
+                'message': (
+                    'Époux : aucun visage de référence dans les dossiers non validés. '
+                    'Passez à la vérification de l\'épouse.'
+                ),
+                'photo_base64': original_b64,
+            }
         return {
             'ok': False,
             'message': 'Aucun visage enregistré sur les dossiers non validés de votre commune.',
@@ -237,6 +247,16 @@ def verifier_facial(user, role, image_base64, etat):
         encodage_capture, catalogue
     )
     if not correspondance or not correspondance.get('correspondance'):
+        if role == 'epoux':
+            etat['epoux_ok'] = True
+            return {
+                'ok': True,
+                'message': (
+                    'Époux : visage non reconnu parmi les dossiers de la commune. '
+                    'Passez à la vérification de l\'épouse.'
+                ),
+                'photo_base64': original_b64,
+            }
         return {
             'ok': False,
             'message': 'Aucun dossier de votre commune ne correspond à ce visage.',

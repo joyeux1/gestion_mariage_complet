@@ -332,12 +332,20 @@
             return false;
         }
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        const maxSide = 640;
+        let cw = video.videoWidth;
+        let ch = video.videoHeight;
+        if (Math.max(cw, ch) > maxSide) {
+            const scale = maxSide / Math.max(cw, ch);
+            cw = Math.round(cw * scale);
+            ch = Math.round(ch * scale);
+        }
+        canvas.width = cw;
+        canvas.height = ch;
         const ctx = canvas.getContext('2d');
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, cw, ch);
         ctx.setTransform(1, 0, 0, 1, 0, 0);
 
         if (!isCanvasValid(canvas)) {
@@ -350,7 +358,7 @@
             return false;
         }
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
         hidden.value = dataUrl;
         hidden.dataset.captured = '1';
         showPreview(role, dataUrl);
@@ -456,6 +464,7 @@
 
         const buttons = document.querySelectorAll('.btn-verif-conjoint');
         buttons.forEach(function (b) { b.disabled = true; });
+        showAlert('Analyse faciale en cours… (quelques secondes)', 'info');
 
         try {
             const response = await fetch(verifUrl, {

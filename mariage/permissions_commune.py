@@ -3,18 +3,65 @@
 from django.db.models import Q
 
 from .models import Commune
+from .roles import (
+    ROLES_AUTORITE,
+    est_autorite_nationale,
+    est_autorite_provinciale,
+    role_utilisateur_upper,
+)
 
 
 def role_utilisateur(user):
     """Rôle métier réel (le superuser conserve son rôle d'affectation)."""
-    return (getattr(user, 'role', None) or '').upper()
+    return role_utilisateur_upper(user)
 
 
 def acces_toutes_communes(user):
-    """Hiérarchie, ou superuser sans commune d'affectation."""
-    if role_utilisateur(user) == 'HIERARCHIE':
+    """Autorités nationales, ou superuser sans affectation géographique."""
+    if est_autorite_nationale(user):
         return True
-    return bool(user.is_superuser and not user.commune_id)
+    return bool(
+        user.is_superuser
+        and not user.commune_id
+        and not user.province_affectation_id
+    )
+
+
+def acces_province_uniquement(user):
+    """Gouverneur et Agent Gouverneur : périmètre provincial."""
+    return est_autorite_provinciale(user)
+
+
+def appliquer_filtre_perimetre_geographique(user, queryset, chemin_commune):
+    """Filtre un queryset selon le périmètre géographique de l'utilisateur."""
+    from .role_permissions import ville_utilisateur
+
+    role = role_utilisateur(user)
+    if acces_toutes_communes(user):
+        return queryset
+    if acces_province_uniquement(user):
+        if not user.province_affectation_id:
+            return queryset.none()
+        return queryset.filter(**{
+            f'{chemin_commune}__ville__province_id': user.province_affectation_id,
+        })
+    if role == 'MAIRE':
+        ville = ville_utilisateur(user)
+        if not ville:
+            return queryset.none()
+        return queryset.filter(**{f'{chemin_commune}__ville': ville})
+    if user.commune_id:
+        if getattr(user, 'affecte_mairie', False):
+            mairie = Commune.objects.filter(
+                ville=user.commune.ville_id, est_mairie=True,
+            ).first()
+            if mairie:
+                return queryset.filter(
+                    Q(**{chemin_commune: user.commune})
+                    | Q(**{chemin_commune: mairie})
+                )
+        return queryset.filter(**{f'{chemin_commune}_id': user.commune_id})
+    return queryset.none()
 
 
 def communes_accessibles(user):
@@ -22,6 +69,12 @@ def communes_accessibles(user):
     role = role_utilisateur(user)
     if acces_toutes_communes(user):
         return Commune.objects.select_related('ville__province').order_by('nom')
+    if acces_province_uniquement(user):
+        if not user.province_affectation_id:
+            return Commune.objects.none()
+        return Commune.objects.filter(
+            ville__province_id=user.province_affectation_id,
+        ).select_related('ville__province').order_by('nom')
     if role == 'MAIRE':
         from .role_permissions import communes_perimetre_maire
         return communes_perimetre_maire(user)
@@ -33,32 +86,12 @@ def communes_accessibles(user):
 def filtrer_divorces_par_acces(user, queryset=None):
     """Divorces limités au périmètre communal de l'utilisateur."""
     from .models import Divorce
-    from .role_permissions import ville_utilisateur
 
     if queryset is None:
         queryset = Divorce.objects.all()
-    role = role_utilisateur(user)
-    if acces_toutes_communes(user):
-        return queryset
-    if role == 'MAIRE':
-        ville = ville_utilisateur(user)
-        if not ville:
-            return queryset.none()
-        return queryset.filter(mariage__dossier__commune_enregistrement__ville=ville)
-    if user.commune_id:
-        if getattr(user, 'affecte_mairie', False):
-            mairie = Commune.objects.filter(
-                ville=user.commune.ville_id, est_mairie=True
-            ).first()
-            if mairie:
-                return queryset.filter(
-                    Q(mariage__dossier__commune_enregistrement=user.commune)
-                    | Q(mariage__dossier__commune_enregistrement=mairie)
-                )
-        return queryset.filter(
-            mariage__dossier__commune_enregistrement_id=user.commune_id
-        )
-    return queryset.none()
+    return appliquer_filtre_perimetre_geographique(
+        user, queryset, 'mariage__dossier__commune_enregistrement',
+    )
 
 
 def libelle_perimetre_dashboard(user):
@@ -72,6 +105,9 @@ def libelle_perimetre_dashboard(user):
         return 'Statistiques nationales'
     if acces_toutes_communes(user):
         return 'Toutes les communes'
+    if acces_province_uniquement(user):
+        province = getattr(user, 'province_affectation', None)
+        return f"Province de {province.nom}" if province else 'Province non configurée'
     if role == 'MAIRE':
         ville = ville_utilisateur(user)
         return f"Ville de {ville.nom}" if ville else 'Périmètre non défini'
@@ -87,31 +123,14 @@ def libelle_perimetre_dashboard(user):
 
 
 def filtrer_dossiers_par_acces(user, queryset=None):
-    """Dossiers limités à la commune / ville / toutes communes selon le rôle."""
+    """Dossiers limités à la commune / ville / province / national selon le rôle."""
     from .models import Dossier
-    from .role_permissions import ville_utilisateur
 
     if queryset is None:
         queryset = Dossier.objects.all()
-    role = role_utilisateur(user)
-    if acces_toutes_communes(user):
-        return queryset
-    if role == 'MAIRE':
-        ville = ville_utilisateur(user)
-        if not ville:
-            return queryset.none()
-        return queryset.filter(commune_enregistrement__ville=ville)
-    if user.commune_id:
-        if getattr(user, 'affecte_mairie', False):
-            mairie = Commune.objects.filter(
-                ville=user.commune.ville_id, est_mairie=True
-            ).first()
-            if mairie:
-                return queryset.filter(
-                    Q(commune_enregistrement=user.commune) | Q(commune_enregistrement=mairie)
-                )
-        return queryset.filter(commune_enregistrement_id=user.commune_id)
-    return queryset.none()
+    return appliquer_filtre_perimetre_geographique(
+        user, queryset, 'commune_enregistrement',
+    )
 
 
 def commune_caisse_active(user, commune_id=None):
@@ -128,7 +147,10 @@ def commune_caisse_active(user, commune_id=None):
 
 def utilisateur_peut_acceder_caisse(user):
     role = role_utilisateur(user)
-    return role in ('HIERARCHIE', 'MAIRE', 'BOURGMESTRE', 'OFFICIER', 'OPERATEUR') or user.is_superuser
+    roles_caisse = (
+        'MAIRE', 'BOURGMESTRE', 'OFFICIER', 'OPERATEUR',
+    ) + tuple(ROLES_AUTORITE)
+    return role in roles_caisse or user.is_superuser
 
 
 def utilisateur_peut_sortir_caisse(user):

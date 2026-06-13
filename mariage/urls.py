@@ -7,6 +7,8 @@ from .views import BourgmestreDashboardView, DossierSyntheseView, QuickSearchVie
 urlpatterns = [
     path('accueil/', portal_views.AccueilRedirectView.as_view(), name='accueil'),
     path('portail/maire/', portal_views.DashboardMaireView.as_view(), name='dashboard_maire'),
+    path('portail/autorite-nationale/', portal_views.DashboardAutoriteNationaleView.as_view(), name='dashboard_autorite_nationale'),
+    path('portail/gouverneur/', portal_views.DashboardGouverneurView.as_view(), name='dashboard_gouverneur'),
     path('portail/hierarchie/', portal_views.DashboardHierarchieView.as_view(), name='dashboard_hierarchie'),
     path('portail/conjoint/', portal_views.PortalConjointView.as_view(), name='portal_conjoint'),
     path('portail/citoyen/', portal_views.PortalCitoyenView.as_view(), name='portal_citoyen'),

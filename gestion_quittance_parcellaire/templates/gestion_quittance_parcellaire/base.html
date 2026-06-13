@@ -1,0 +1,63 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Quittances parcellaires{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root { --qp-primary: #1a5f4a; --qp-accent: #c9a227; }
+        body { background: #f4f6f5; }
+        .navbar-qp { background: var(--qp-primary); }
+        .sidebar-qp { background: #fff; min-height: calc(100vh - 56px); border-right: 1px solid #dee2e6; }
+        .sidebar-qp .nav-link { color: #333; }
+        .sidebar-qp .nav-link.active { background: var(--qp-primary); color: #fff; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-dark navbar-qp sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="{% url 'gestion_quittance_parcellaire:quittance_list' %}">
+                <i class="bi bi-receipt me-2"></i> QUITTANCES PARCELLAIRES
+            </a>
+            <div class="d-flex align-items-center text-white small">
+                <span>{{ user.username }}</span>
+                <a href="{% url 'accueil' %}" class="btn btn-sm btn-outline-light ms-3">État civil</a>
+                <form action="{% url 'logout' %}" method="post" class="ms-2 m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-light">Déconnexion</button>
+                </form>
+            </div>
+        </div>
+    </nav>
+    <div class="container-fluid">
+        <div class="row">
+            <nav class="col-md-2 sidebar-qp py-3 d-none d-md-block">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{% url 'gestion_quittance_parcellaire:quittance_list' %}">
+                            <i class="bi bi-list-ul me-2"></i> Liste des quittances
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            <main class="col-md-10 py-4 px-4">
+                {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

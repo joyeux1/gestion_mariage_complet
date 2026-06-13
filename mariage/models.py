@@ -69,8 +69,15 @@ class Utilisateur(AbstractUser):
         ('operateur', 'Operateur de saisie'),
         ('officier', 'Officier Etat Civil'),
         ('bourgmestre', 'Bourgmestre'),
-        ('maire', 'Maire'),
-        ('hierarchie', 'Hierarchie'),
+        ('maire', 'Maire de la ville'),
+        ('gouverneur', 'Gouverneur'),
+        ('agent_gouverneur', 'Agent Gouverneur'),
+        ('ministre_national', 'Ministre National'),
+        ('agent_ministre_national', 'Agent Ministre National'),
+        ('premier_ministre', 'Premier Ministre'),
+        ('agent_premier_ministre', 'Agent Premier Ministre'),
+        ('president', 'Président'),
+        ('agent_president', 'Agent Président'),
         ('conjoint', 'Conjoint'),
         ('citoyen', 'citoyen'),
     ]
@@ -79,7 +86,7 @@ class Utilisateur(AbstractUser):
     nom = models.CharField(max_length=100, blank=True, help_text="Nom de famille (actes officiels).")
     post_nom = models.CharField(max_length=100, blank=True, help_text="Postnom (actes officiels).")
     prenom = models.CharField(max_length=100, blank=True, help_text="Prénom (actes officiels).")
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=30, choices=ROLE_CHOICES)
     commune = models.ForeignKey(
         Commune, on_delete=models.CASCADE, null=True, blank=True,
         related_name='agents',
@@ -88,6 +95,11 @@ class Utilisateur(AbstractUser):
         'Ville', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='maires',
         help_text="Ville d'affectation pour le maire (accès à toutes les communes + mairie).",
+    )
+    province_affectation = models.ForeignKey(
+        Province, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='autorites_provinciales',
+        help_text="Province d'affectation pour le Gouverneur et son Agent.",
     )
     epoux_lie = models.ForeignKey(
         'Epoux', on_delete=models.SET_NULL, null=True, blank=True,
@@ -108,6 +120,19 @@ class Utilisateur(AbstractUser):
 
     def __str__(self):
         return f"{self.username} - {self.role}"
+
+    def clean(self):
+        super().clean()
+        from .roles import ROLES_ACCES_PROVINCE, role_utilisateur_upper
+
+        role = role_utilisateur_upper(self)
+        if role in ROLES_ACCES_PROVINCE and not self.province_affectation_id:
+            raise ValidationError({
+                'province_affectation': (
+                    'Une province d\'affectation est obligatoire pour le Gouverneur '
+                    'et l\'Agent Gouverneur.'
+                ),
+            })
 
     def nom_complet_officiel(self):
         """Nom, postnom et prénom pour les actes (bourgmestre, maire, etc.)."""

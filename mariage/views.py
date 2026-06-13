@@ -163,8 +163,11 @@ class DashboardView(LoginRequiredMixin, ListView):
                 return redirect('dossier_list')
             if role_utilisateur(request.user) == 'MAIRE':
                 return redirect('dashboard_maire')
-            if role_utilisateur(request.user) == 'HIERARCHIE':
-                return redirect('dashboard_hierarchie')
+            from .roles import est_autorite_nationale, est_autorite_provinciale
+            if est_autorite_nationale(request.user):
+                return redirect('dashboard_autorite_nationale')
+            if est_autorite_provinciale(request.user):
+                return redirect('dashboard_gouverneur')
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
@@ -394,7 +397,19 @@ def _commune_agent_utilisateur(user):
                 return mairie
         return user.commune
     if user.is_superuser:
-        return Commune.objects.first()
+        return Commune.objects.order_by('pk').first()
+    return None
+
+
+def _commune_enregistrement_dossier(user, request):
+    """Commune cible pour un nouvel enregistrement (agent affecté ou choix superuser)."""
+    commune = _commune_agent_utilisateur(user)
+    if commune:
+        return commune
+    if user.is_superuser:
+        raw = (request.POST.get('commune_enregistrement_id') or '').strip()
+        if raw.isdigit():
+            return Commune.objects.filter(pk=int(raw)).first()
     return None
 
 
@@ -488,7 +503,13 @@ def _attacher_reconnaissance_faciale(conjoint, fichier):
 
 
 class DossierListView(SmartSecurityMixin, ListView):
-    allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
+    allowed_roles = [
+        'OPERATEUR', 'OFFICIER', 'BOURGMESTRE', 'MAIRE',
+        'GOUVERNEUR', 'AGENT_GOUVERNEUR',
+        'MINISTRE_NATIONAL', 'AGENT_MINISTRE_NATIONAL',
+        'PREMIER_MINISTRE', 'AGENT_PREMIER_MINISTRE',
+        'PRESIDENT', 'AGENT_PRESIDENT',
+    ]
     model = Dossier
     template_name = 'mariage/dossiers/dossier_list.html'
     context_object_name = 'dossiers'
@@ -515,7 +536,13 @@ class DossierListView(SmartSecurityMixin, ListView):
 class DossierListeRechercheAPIView(SmartSecurityMixin, View):
     """Recherche progressive (nom, n° dossier) pour la liste des dossiers."""
 
-    allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
+    allowed_roles = [
+        'OPERATEUR', 'OFFICIER', 'BOURGMESTRE', 'MAIRE',
+        'GOUVERNEUR', 'AGENT_GOUVERNEUR',
+        'MINISTRE_NATIONAL', 'AGENT_MINISTRE_NATIONAL',
+        'PREMIER_MINISTRE', 'AGENT_PREMIER_MINISTRE',
+        'PRESIDENT', 'AGENT_PRESIDENT',
+    ]
     limite_defaut = 10
     limite_filtre = 50
 
@@ -652,8 +679,13 @@ class DossierCreateView(SmartSecurityMixin, View):
 
     def _contexte_formulaire(self, request, commune_agent, etat_verif):
         return {
-            'communes': Commune.objects.select_related('ville__province').all(),
+            'communes': Commune.objects.select_related('ville__province').order_by('ville__nom', 'nom'),
             'commune_agent': commune_agent,
+            'choix_commune_requis': (
+                request.user.is_superuser
+                and not commune_agent
+                and Commune.objects.exists()
+            ),
             'etape_biometrie': not verif_complete(etat_verif),
             'verif_etat': etat_verif,
             'empreinte_epoux_valide': etat_verif.get('empreinte_epoux', ''),
@@ -720,12 +752,26 @@ class DossierCreateView(SmartSecurityMixin, View):
 
         # ACTION : ENREGISTREMENT DU CŒUR DE SAISIE (4 BLOCS)
         if 'enregistrer_coeur_saisie' in request.POST:
+            commune_agent = _commune_enregistrement_dossier(request.user, request)
             if not commune_agent:
-                messages.error(
-                    request,
-                    "Votre compte n'est affecté à aucune commune : impossible d'enregistrer le dossier.",
-                )
-                context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                if not Commune.objects.exists():
+                    messages.error(
+                        request,
+                        "Aucune commune n'existe dans la base de données. "
+                        "Exécutez « python manage.py seed_demo_mariage » ou créez une commune dans l'administration.",
+                    )
+                elif request.user.is_superuser:
+                    messages.error(
+                        request,
+                        "Sélectionnez la commune d'enregistrement du dossier (liste déroulante en haut du formulaire).",
+                    )
+                else:
+                    messages.error(
+                        request,
+                        "Votre compte n'est affecté à aucune commune : impossible d'enregistrer le dossier. "
+                        "Contactez l'administrateur pour une affectation communale.",
+                    )
+                context = self._contexte_formulaire(request, None, etat_verif)
                 context['etape_biometrie'] = False
                 return render(request, self.template_name, context)
 
@@ -898,6 +944,12 @@ class DossierCreateView(SmartSecurityMixin, View):
                 messages.error(request, f"Échec de l'enregistrement. Détails : {str(e)}")
                 return _reafficher_formulaire()
 
+        context = self._contexte_formulaire(request, commune_agent, etat_verif)
+        context['etape_biometrie'] = False
+        messages.warning(request, "Action non reconnue. Utilisez le bouton « Valider et Ouvrir le Dossier ».")
+        return render(request, self.template_name, context)
+
+
 class DocumentCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
     allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE']
     model = Document
@@ -939,7 +991,13 @@ class TemoinCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
 # =================================
 
 class MariageListView(SmartSecurityMixin, ListView):
-    allowed_roles = ['OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
+    allowed_roles = [
+        'OFFICIER', 'BOURGMESTRE', 'MAIRE',
+        'GOUVERNEUR', 'AGENT_GOUVERNEUR',
+        'MINISTRE_NATIONAL', 'AGENT_MINISTRE_NATIONAL',
+        'PREMIER_MINISTRE', 'AGENT_PREMIER_MINISTRE',
+        'PRESIDENT', 'AGENT_PRESIDENT',
+    ]
     model = Mariage
     template_name = 'mariage/mariages/mariage_list.html'
     context_object_name = 'mariages'
@@ -1016,28 +1074,6 @@ def _nettoyer_image_base64(image_base64):
     if ',' in image_base64:
         return image_base64.split(',', 1)[1]
     return image_base64
-
-
-
-
-def _encodage_facial_conjoint(conjoint):
-    """Retourne l'encodage numpy d'un conjoint (BD ou photo carte/profil)."""
-    if not conjoint:
-        return None
-
-    rf = getattr(conjoint, 'reconnaissance_faciale', None)
-    if rf and rf.encodage_facial:
-        return ReconnaissanceFacialeService.decoder_json(rf.encodage_facial)
-
-    img = photo_conjoint_affichage(conjoint)
-    if not img or not img.name or not default_storage.exists(img.name):
-        return None
-
-    try:
-        with default_storage.open(img.name, 'rb') as fichier:
-            return ReconnaissanceFacialeService.extraire_encodage_facial(fichier)
-    except ValidationError:
-        return None
 
 
 class DossierRechercheMariageAPIView(LoginRequiredMixin, View):
@@ -1299,7 +1335,13 @@ class MariageUpdateView(SmartSecurityMixin, AjaxFormMixin, UpdateView):
 # ==========================================
 
 class DivorceListView(SmartSecurityMixin, ListView):
-    allowed_roles = ['OFFICIER', 'BOURGMESTRE', 'MAIRE', 'HIERARCHIE']
+    allowed_roles = [
+        'OFFICIER', 'BOURGMESTRE', 'MAIRE',
+        'GOUVERNEUR', 'AGENT_GOUVERNEUR',
+        'MINISTRE_NATIONAL', 'AGENT_MINISTRE_NATIONAL',
+        'PREMIER_MINISTRE', 'AGENT_PREMIER_MINISTRE',
+        'PRESIDENT', 'AGENT_PRESIDENT',
+    ]
     model = Divorce
     template_name = 'mariage/divorces/divorce_list.html'
     context_object_name = 'divorces'

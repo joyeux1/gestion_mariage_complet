@@ -1,0 +1,33 @@
+{% extends 'mariage/base.html' %}
+{% block title %}Gouverneur — État civil{% endblock %}
+{% block content %}
+<h2 class="fw-bold mb-4">
+    <i class="bi bi-geo-alt me-2"></i> Tableau de bord — Gouverneur
+    {% if province %}<span class="text-muted fs-5">({{ province.nom }})</span>{% endif %}
+</h2>
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted small">Mariages</h6><h3>{{ total_mariages }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted small">Actifs</h6><h3>{{ mariages_actifs }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted small">Divorces</h6><h3>{{ total_divorces }}</h3></div></div></div>
+    <div class="col-md-3"><div class="card border-0 shadow-sm"><div class="card-body"><h6 class="text-muted small">Communes (province)</h6><h3>{{ nb_communes }}</h3></div></div></div>
+</div>
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-bold">Communes de la province{% if province %} — {{ province.nom }}{% endif %}</div>
+    <div class="card-body p-0 table-responsive" style="max-height:400px;overflow:auto;">
+        <table class="table table-sm table-hover mb-0">
+            <thead><tr><th>Commune</th><th>Ville</th><th></th></tr></thead>
+            <tbody>
+                {% for c in communes %}
+                <tr>
+                    <td>{{ c.nom }}{% if c.est_mairie %} <span class="badge bg-warning text-dark">Mairie</span>{% endif %}</td>
+                    <td>{{ c.ville.nom }}</td>
+                    <td><a href="{% url 'bourgmestre_dashboard' %}?commune={{ c.pk }}" class="btn btn-sm btn-outline-warning">Caisse</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="text-muted text-center py-3">Aucune commune dans ce périmètre.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

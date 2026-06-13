@@ -12,16 +12,16 @@ from .models import (
 @admin.register(Utilisateur)
 class UtilisateurAdmin(UserAdmin):
     list_display = (
-        'username', 'role', 'commune', 'ville', 'affecte_mairie',
-        'epoux_lie', 'epouse_lie', 'is_staff',
+        'username', 'role', 'commune', 'ville', 'province_affectation',
+        'affecte_mairie', 'epoux_lie', 'epouse_lie', 'is_staff',
     )
-    list_filter = ('role', 'affecte_mairie', 'commune', 'ville')
+    list_filter = ('role', 'affecte_mairie', 'commune', 'ville', 'province_affectation')
     search_fields = ('username', 'first_name', 'last_name', 'nom', 'post_nom', 'prenom', 'email')
     fieldsets = UserAdmin.fieldsets + (
         ('Informations complémentaires', {
             'fields': (
                 'nom', 'post_nom', 'prenom',
-                'telephone', 'role', 'commune', 'ville', 'affecte_mairie',
+                'telephone', 'role', 'commune', 'ville', 'province_affectation', 'affecte_mairie',
                 'epoux_lie', 'epouse_lie',
             ),
         }),
@@ -30,7 +30,7 @@ class UtilisateurAdmin(UserAdmin):
         ('Informations complémentaires', {
             'fields': (
                 'nom', 'post_nom', 'prenom',
-                'telephone', 'role', 'commune', 'ville', 'affecte_mairie',
+                'telephone', 'role', 'commune', 'ville', 'province_affectation', 'affecte_mairie',
             ),
         }),
     )
