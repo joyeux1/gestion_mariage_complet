@@ -18,10 +18,10 @@ from django.views import View
 from django.shortcuts import get_object_or_404, render, redirect
 from django.template.loader import render_to_string
 from django.contrib import messages
-from django.db import transaction
+from django.db import transaction, IntegrityError
 
 from .models import (
-    CaisseCommune, Commune, MouvementCaisse, EmpreinteDigitale, ReconnaissanceFaciale,
+    CaisseCommune, Commune, EmpreinteDigitale, ReconnaissanceFaciale,
     Epoux, Epouse, Dossier, Paiement, Document, Temoin, Mariage, Divorce,
     photo_conjoint_affichage,
 )
@@ -42,6 +42,12 @@ from .permissions_commune import (
     filtrer_dossiers_par_acces,
     role_utilisateur,
     utilisateur_peut_acceder_caisse,
+    utilisateur_peut_sortir_caisse,
+)
+from .caisse_commune import (
+    enregistrer_mouvement_entree,
+    enregistrer_sortie_caisse,
+    mouvements_caisse_commune,
 )
 from .services_biometrie import ReconnaissanceFacialeService
 from .verification_dossier import (
@@ -162,14 +168,12 @@ class DashboardView(LoginRequiredMixin, ListView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        return (
-            Mariage.objects.select_related('epoux', 'epouse')
-            .order_by('-date_enregistrement')[:10]
-        )
+        qs = Mariage.objects.select_related('epoux', 'epouse').order_by('-date_enregistrement')
+        return filtrer_mariages_par_acces(self.request.user, qs)[:10]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(stats_dashboard_general())
+        context.update(stats_dashboard_general(self.request.user))
         return context
 
 
@@ -177,7 +181,7 @@ class DashboardStatsAPIView(LoginRequiredMixin, View):
     """API JSON pour actualisation du tableau de bord principal."""
 
     def get(self, request):
-        stats = stats_dashboard_general()
+        stats = stats_dashboard_general(request.user)
         activites = []
         for act in stats['activites_recentes']:
             activites.append({
@@ -204,6 +208,7 @@ class DashboardStatsAPIView(LoginRequiredMixin, View):
             'chart_data': stats['chart_data'],
             'activites_recentes': activites,
             'now_label': stats['now'].strftime('%d %B %Y'),
+            'perimetre_label': stats.get('perimetre_label', ''),
         })
 
 
@@ -393,6 +398,28 @@ def _commune_agent_utilisateur(user):
     return None
 
 
+def _fk_commune_id(valeur, commune_defaut=None):
+    """Convertit une valeur POST en id commune valide (ou None)."""
+    if valeur not in (None, ''):
+        try:
+            return int(valeur)
+        except (TypeError, ValueError):
+            pass
+    return commune_defaut.pk if commune_defaut else None
+
+
+def _type_paiement_dossier(montant_verse, total_du):
+    """Avance ou totalité selon le montant versé."""
+    try:
+        verse = Decimal(str(montant_verse or 0))
+        du = Decimal(str(total_du or 0))
+    except Exception:
+        return 'avance'
+    if du > 0 and verse >= du:
+        return 'totalite'
+    return 'avance'
+
+
 def _prefill_depuis_profil_citoyen(identite):
     """Enrichit le préremplissage avec le profil citoyen si disponible."""
     base = _identite_prefill(identite)
@@ -479,6 +506,9 @@ class DossierListView(SmartSecurityMixin, ListView):
         context.update(contexte_filtres_liste(
             self.request, params, 'dossier', self.limite_defaut, self.request.user
         ))
+        nouveau_id = self.request.GET.get('nouveau', '').strip()
+        if nouveau_id.isdigit():
+            context['dossier_nouveau_id'] = int(nouveau_id)
         return context
 
 
@@ -499,7 +529,10 @@ class DossierListeRechercheAPIView(SmartSecurityMixin, View):
         ))
         html = render_to_string(
             'mariage/partials/dossier_list_rows.html',
-            {'dossiers': dossiers},
+            {
+                'dossiers': dossiers,
+                'filtres_actifs': filtres_actifs(params),
+            },
             request=request,
         )
         ctx = contexte_filtres_liste(
@@ -687,6 +720,15 @@ class DossierCreateView(SmartSecurityMixin, View):
 
         # ACTION : ENREGISTREMENT DU CŒUR DE SAISIE (4 BLOCS)
         if 'enregistrer_coeur_saisie' in request.POST:
+            if not commune_agent:
+                messages.error(
+                    request,
+                    "Votre compte n'est affecté à aucune commune : impossible d'enregistrer le dossier.",
+                )
+                context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                context['etape_biometrie'] = False
+                return render(request, self.template_name, context)
+
             fichiers = _fichiers_formulaire_avec_session(request, etat_verif)
             erreurs_photo = []
             if not fichiers.get('e_photo'):
@@ -697,6 +739,7 @@ class DossierCreateView(SmartSecurityMixin, View):
                 for msg in erreurs_photo:
                     messages.error(request, msg)
                 context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                context['etape_biometrie'] = False
                 return render(request, self.template_name, context)
 
             date_depot = parse_date((request.POST.get('date_depot') or '').strip())
@@ -706,10 +749,17 @@ class DossierCreateView(SmartSecurityMixin, View):
                     "La date de dépôt du dossier est obligatoire (indiquez le jour où le dossier a été déposé au guichet).",
                 )
                 context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                context['etape_biometrie'] = False
                 return render(request, self.template_name, context)
             if date_depot > timezone.now().date():
                 messages.error(request, "La date de dépôt ne peut pas être postérieure à aujourd'hui.")
                 context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                context['etape_biometrie'] = False
+                return render(request, self.template_name, context)
+
+            def _reafficher_formulaire():
+                context = self._contexte_formulaire(request, commune_agent, etat_verif)
+                context['etape_biometrie'] = False
                 return render(request, self.template_name, context)
 
             try:
@@ -722,39 +772,39 @@ class DossierCreateView(SmartSecurityMixin, View):
                         fichiers.get('f_scan_empreinte')
                     )
 
-                    # --- CORRECTION ET SÉCURITÉ DES DONNÉES POST ---
                     prof_epoux = request.POST.get('e_profession') or "Sans"
                     prof_epouse = request.POST.get('f_profession') or "Sans"
-                    
-                    commune_epoux = request.POST.get('e_commune_residence')
-                    commune_epouse = request.POST.get('f_commune_residence')
+                    commune_epoux_id = _fk_commune_id(
+                        request.POST.get('e_commune_residence'), commune_agent
+                    )
+                    commune_epouse_id = _fk_commune_id(
+                        request.POST.get('f_commune_residence'), commune_agent
+                    )
 
-                    # --- BLOC 1 : L'ÉPOUX ---
                     epoux = Epoux.objects.create(
-                        nom=request.POST.get('e_nom'),
-                        post_nom=request.POST.get('e_postnom'),
-                        prenom=request.POST.get('e_prenom'),
-                        telephone=request.POST.get('e_tel'),
-                        numero_piece=request.POST.get('e_num_piece'),
+                        nom=(request.POST.get('e_nom') or '').strip(),
+                        post_nom=(request.POST.get('e_postnom') or '').strip() or '—',
+                        prenom=(request.POST.get('e_prenom') or '').strip(),
+                        telephone=(request.POST.get('e_tel') or '').strip(),
+                        numero_piece=(request.POST.get('e_num_piece') or '').strip(),
                         piece_identite=request.POST.get('e_piece_identite') or "Carte d'Électeur",
-                        commune_residence_id=commune_epoux,
+                        commune_residence_id=commune_epoux_id,
                         profession=prof_epoux,
-                        empreinte_digitale=empreinte_obj_epoux
+                        empreinte_digitale=empreinte_obj_epoux,
                     )
                     _maj_conjoint_modification(epoux, 'e', request.POST, fichiers)
                     _attacher_reconnaissance_faciale(epoux, fichiers.get('e_photo'))
 
-                    # --- BLOC 2 : L'ÉPOUSE ---
                     epouse = Epouse.objects.create(
-                        nom=request.POST.get('f_nom'),
-                        post_nom=request.POST.get('f_postnom'),
-                        prenom=request.POST.get('f_prenom'),
-                        telephone=request.POST.get('f_tel'),
-                        numero_piece=request.POST.get('f_num_piece'),
+                        nom=(request.POST.get('f_nom') or '').strip(),
+                        post_nom=(request.POST.get('f_postnom') or '').strip() or '—',
+                        prenom=(request.POST.get('f_prenom') or '').strip(),
+                        telephone=(request.POST.get('f_tel') or '').strip(),
+                        numero_piece=(request.POST.get('f_num_piece') or '').strip(),
                         piece_identite=request.POST.get('f_piece_identite') or "Carte d'Électeur",
-                        commune_residence_id=commune_epouse,
+                        commune_residence_id=commune_epouse_id,
                         profession=prof_epouse,
-                        empreinte_digitale=empreinte_obj_epouse
+                        empreinte_digitale=empreinte_obj_epouse,
                     )
                     _maj_conjoint_modification(epouse, 'f', request.POST, fichiers)
                     _attacher_reconnaissance_faciale(epouse, fichiers.get('f_photo'))
@@ -810,44 +860,43 @@ class DossierCreateView(SmartSecurityMixin, View):
                             temoin2.photo = request.FILES['t2_photo_carte']
                             temoin2.save()
 
-                    # --- FINANCES : PAIEMENT INITIAL (CORRIGÉ) ---
-                    montant_verse = float(request.POST.get('montant_paye', 0))
+                    montant_verse = Decimal(str(request.POST.get('montant_paye', 0) or 0))
+                    total_du = Decimal(str(request.POST.get('total_du', 50) or 50))
                     if montant_verse > 0:
-                        # Nettoyage du type de paiement pour correspondre aux choix ('avance' ou 'totalite')
-                        type_form = request.POST.get('type_paiement', 'avance').lower()
-                        type_valide = type_form if type_form in ['avance', 'totalite'] else 'avance'
-                        
-                        # Récupération propre du montant total fixé (ex: 50)
-                        total_du = request.POST.get('total_du', 50)
-
-                        Paiement.objects.create(
+                        type_valide = _type_paiement_dossier(montant_verse, total_du)
+                        paiement = Paiement.objects.create(
                             dossier=dossier,
-                            montant_total_du=Decimal(str(total_du)),  # Le bon nom du champ !
-                            montant_paye=Decimal(str(montant_verse)),
+                            montant_total_du=total_du,
+                            montant_paye=montant_verse,
                             type_paiement=type_valide,
-                            agent_recouvreur=request.user             # Pour alimenter la clé étrangère
+                            agent_recouvreur=request.user,
+                        )
+                        caisse, _ = CaisseCommune.objects.get_or_create(commune=commune_agent)
+                        enregistrer_mouvement_entree(
+                            caisse, dossier, montant_verse, request.user, paiement=paiement
                         )
 
-                        # Mise à jour de la caisse de la commune
-                        caisse, created = CaisseCommune.objects.get_or_create(commune=commune_agent)
-                        caisse.solde_actuel += Decimal(str(montant_verse))
-                        caisse.save()
-
-                        # Enregistrement du mouvement comptable
-                        MouvementCaisse.objects.create(
-                            caisse=caisse,
-                            dossier=dossier,
-                            montant=montant_verse,
-                            agent=request.user
-                        )
-
-                messages.success(request, f"Cœur de Saisie validé ! Le dossier a été affecté à la commune de {commune_agent.nom}.")
+                messages.success(
+                    request,
+                    f"Dossier N° {dossier.numero_dossier} enregistré pour la commune de {commune_agent.nom}.",
+                )
                 reinitialiser_verif(request.session)
-                return redirect('dossier_list')
+                return redirect(f"{reverse('dossier_list')}?nouveau={dossier.pk}")
 
+            except IntegrityError as exc:
+                msg = str(exc)
+                if 'numero_piece' in msg:
+                    messages.error(
+                        request,
+                        "Ce numéro de pièce d'identité est déjà utilisé dans le système. "
+                        "Vérifiez les N° carte époux/épouse.",
+                    )
+                else:
+                    messages.error(request, f"Donnée en double ou invalide : {msg}")
+                return _reafficher_formulaire()
             except Exception as e:
                 messages.error(request, f"Échec de l'enregistrement. Détails : {str(e)}")
-                return redirect('dossier_list')
+                return _reafficher_formulaire()
 
 class DocumentCreateView(SmartSecurityMixin, AjaxFormMixin, CreateView):
     allowed_roles = ['OPERATEUR', 'OFFICIER', 'BOURGMESTRE']
@@ -922,6 +971,11 @@ class MariageListView(SmartSecurityMixin, ListView):
         context.update(contexte_filtres_liste(
             self.request, params, 'mariage', self.limite_defaut, self.request.user
         ))
+        commune_agent = _commune_agent_utilisateur(self.request.user)
+        context['commune_recherche_mariage'] = commune_agent.nom if commune_agent else None
+        context['mariage_verif_url'] = reverse('mariage_verifier_conjoint')
+        context['mariage_recherche_url'] = reverse('mariage_recherche_nominative')
+        context['mariage_reinit_url'] = reverse('mariage_reinitialiser_verification')
         return context
 
 
@@ -952,7 +1006,8 @@ class MariageActeEmbedView(LoginRequiredMixin, DetailView):
             'epoux',
             'epouse',
             'dossier__commune_enregistrement__ville__province',
-        )
+            'dossier',
+        ).prefetch_related('temoins')
 
 
 def _nettoyer_image_base64(image_base64):
@@ -963,57 +1018,6 @@ def _nettoyer_image_base64(image_base64):
     return image_base64
 
 
-def _queryset_dossiers_eligibles_mariage():
-    """Dossiers utilisables pour créer un acte (sans mariage existant)."""
-    dossiers_avec_acte = Mariage.objects.values_list('dossier_id', flat=True)
-    return (
-        Dossier.objects.filter(
-            statut__in=['valide', 'en_cours', 'ouvert'],
-            epoux__isnull=False,
-            epouse__isnull=False,
-        )
-        .exclude(pk__in=dossiers_avec_acte)
-        .select_related(
-            'epoux',
-            'epouse',
-            'epoux__reconnaissance_faciale',
-            'epouse__reconnaissance_faciale',
-            'commune_enregistrement__ville__province',
-        )
-        .distinct()
-    )
-
-
-def _serialiser_dossier_mariage_recherche(dossier, correspondance=None):
-    commune = dossier.commune_enregistrement
-    img_epoux = photo_conjoint_affichage(dossier.epoux)
-    img_epouse = photo_conjoint_affichage(dossier.epouse)
-    data = {
-        'id': dossier.pk,
-        'numero_dossier': dossier.numero_dossier,
-        'statut': dossier.statut,
-        'statut_label': dossier.get_statut_display(),
-        'epoux': {
-            'nom_complet': f"{dossier.epoux.nom} {dossier.epoux.post_nom} {dossier.epoux.prenom}".strip(),
-            'photo_url': img_epoux.url if img_epoux else None,
-            'photo_carte': dossier.epoux.photo_carte.url if dossier.epoux.photo_carte else None,
-            'photo': dossier.epoux.photo.url if dossier.epoux.photo else None,
-        },
-        'epouse': {
-            'nom_complet': f"{dossier.epouse.nom} {dossier.epouse.post_nom} {dossier.epouse.prenom}".strip(),
-            'photo_url': img_epouse.url if img_epouse else None,
-            'photo_carte': dossier.epouse.photo_carte.url if dossier.epouse.photo_carte else None,
-            'photo': dossier.epouse.photo.url if dossier.epouse.photo else None,
-        },
-        'lieu': {
-            'commune': commune.nom if commune else '—',
-            'ville': commune.ville.nom if commune else '—',
-            'province': commune.ville.province.nom if commune else '—',
-        },
-    }
-    if correspondance:
-        data['correspondance'] = correspondance
-    return data
 
 
 def _encodage_facial_conjoint(conjoint):
@@ -1037,43 +1041,63 @@ def _encodage_facial_conjoint(conjoint):
 
 
 class DossierRechercheMariageAPIView(LoginRequiredMixin, View):
-    """Recherche de dossiers validés pour le workflow Nouveau Mariage."""
+    """Recherche nominative de dossiers non validés (commune de l'agent)."""
 
     def get(self, request):
+        from .recherche_mariage_dossier import (
+            rechercher_dossiers_nominatif,
+            serialiser_dossier_mariage_recherche,
+        )
+
         nom = request.GET.get('nom', '').strip()
         postnom = request.GET.get('postnom', '').strip()
         prenom = request.GET.get('prenom', '').strip()
 
-        dossiers = _queryset_dossiers_eligibles_mariage()
+        dossiers = rechercher_dossiers_nominatif(request.user, nom, postnom, prenom)
+        resultats = [serialiser_dossier_mariage_recherche(d) for d in dossiers]
+        message = None
+        if not resultats and any([nom, postnom, prenom]):
+            message = 'Aucun dossier non validé de votre commune ne correspond à ces critères.'
 
-        if nom:
-            dossiers = dossiers.filter(
-                Q(epoux__nom__icontains=nom)
-                | Q(epouse__nom__icontains=nom)
-            )
-        if postnom:
-            dossiers = dossiers.filter(
-                Q(epoux__post_nom__icontains=postnom)
-                | Q(epouse__post_nom__icontains=postnom)
-            )
-        if prenom:
-            dossiers = dossiers.filter(
-                Q(epoux__prenom__icontains=prenom)
-                | Q(epouse__prenom__icontains=prenom)
-            )
+        return JsonResponse({'success': True, 'dossiers': resultats, 'message': message})
 
-        resultats = [
-            _serialiser_dossier_mariage_recherche(dossier)
-            for dossier in dossiers[:15]
-        ]
 
-        return JsonResponse({'success': True, 'dossiers': resultats})
+class DossierRechercheEmpreinteMariageAPIView(LoginRequiredMixin, View):
+    """Recherche par empreinte sur dossiers non validés (commune de l'agent)."""
+
+    def post(self, request):
+        from .recherche_mariage_dossier import (
+            rechercher_dossiers_empreinte,
+            serialiser_dossier_mariage_recherche,
+        )
+
+        fichier_epoux = request.FILES.get('scan_empreinte_epoux')
+        fichier_epouse = request.FILES.get('scan_empreinte_epouse')
+
+        if not fichier_epoux and not fichier_epouse:
+            return JsonResponse({
+                'success': False,
+                'errors': {'empreinte': ['Chargez au moins une empreinte (époux ou épouse).']},
+            }, status=400)
+
+        dossiers = rechercher_dossiers_empreinte(request.user, fichier_epoux, fichier_epouse)
+        resultats = [serialiser_dossier_mariage_recherche(d) for d in dossiers]
+        message = None
+        if not resultats:
+            message = 'Aucun dossier non validé de votre commune identifié pour ces empreintes.'
+
+        return JsonResponse({'success': True, 'dossiers': resultats, 'message': message})
 
 
 class DossierRechercheFacialeMariageAPIView(LoginRequiredMixin, View):
-    """Recherche de dossiers par reconnaissance faciale (webcam ou photo)."""
+    """Recherche faciale sur dossiers non validés (commune de l'agent)."""
 
     def post(self, request):
+        from .recherche_mariage_dossier import (
+            meilleure_correspondance_faciale_dossier,
+            serialiser_dossier_mariage_recherche,
+        )
+
         image_base64 = request.POST.get('image_base64', '').strip()
         if not image_base64:
             return JsonResponse(
@@ -1102,43 +1126,26 @@ class DossierRechercheFacialeMariageAPIView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        candidats = []
-        for dossier in _queryset_dossiers_eligibles_mariage()[:50]:
-            for role, conjoint, label in (
-                ('epoux', dossier.epoux, 'Époux'),
-                ('epouse', dossier.epouse, 'Épouse'),
-            ):
-                encodage = _encodage_facial_conjoint(conjoint)
-                if encodage is None:
-                    continue
-                candidats.append({
-                    'dossier': dossier,
-                    'id': f"{dossier.pk}-{role}",
-                    'encodage': encodage,
-                    'meta': {
-                        'role': role,
-                        'role_label': label,
-                        'nom_complet': f"{conjoint.nom} {conjoint.post_nom} {conjoint.prenom}".strip(),
-                    },
-                })
+        correspondance, candidats = meilleure_correspondance_faciale_dossier(
+            request.user, encodage_capture
+        )
 
         if not candidats:
             return JsonResponse({
                 'success': True,
                 'dossiers': [],
-                'message': 'Aucune photo faciale enregistrée sur les dossiers. Ajoutez des photos de carte ou une capture biométrique.',
+                'message': (
+                    'Aucune photo faciale sur les dossiers non validés de votre commune. '
+                    'Ajoutez des photos de carte ou une capture biométrique.'
+                ),
             })
-
-        correspondance = ReconnaissanceFacialeService.meilleure_correspondance(
-            encodage_capture, candidats
-        )
 
         if not correspondance or not correspondance.get('correspondance'):
             distance = correspondance['distance'] if correspondance else None
             return JsonResponse({
                 'success': True,
                 'dossiers': [],
-                'message': 'Aucun dossier ne correspond à ce visage.',
+                'message': 'Aucun dossier non validé de votre commune ne correspond à ce visage.',
                 'distance': distance,
             })
 
@@ -1150,7 +1157,7 @@ class DossierRechercheFacialeMariageAPIView(LoginRequiredMixin, View):
                 int((1 - correspondance['distance'] / ReconnaissanceFacialeService.DISTANCE_TOLERANCE) * 100),
             ),
         )
-        resultat = _serialiser_dossier_mariage_recherche(
+        resultat = serialiser_dossier_mariage_recherche(
             dossier,
             correspondance={
                 'role': correspondance['meta']['role'],
@@ -1202,6 +1209,22 @@ class MariageEnregistrerActeAPIView(LoginRequiredMixin, View):
         if not dossier.epoux or not dossier.epouse:
             return JsonResponse(
                 {'success': False, 'errors': {'dossier_id': ['Époux et épouse requis sur le dossier.']}},
+                status=400,
+            )
+
+        from .recherche_mariage_dossier import queryset_dossiers_eligibles_mariage
+
+        if not queryset_dossiers_eligibles_mariage(request.user).filter(pk=dossier.pk).exists():
+            return JsonResponse(
+                {
+                    'success': False,
+                    'errors': {
+                        'dossier_id': [
+                            'Ce dossier n\'est pas éligible : il doit être non validé '
+                            'et appartenir à votre commune.',
+                        ],
+                    },
+                },
                 status=400,
             )
 
@@ -1292,6 +1315,8 @@ class DivorceListView(SmartSecurityMixin, ListView):
             )
             .order_by('-date_enregistrement')
         )
+        from .permissions_commune import filtrer_divorces_par_acces
+        qs = filtrer_divorces_par_acces(self.request.user, qs)
         qs = appliquer_filtres_divorce(qs, params)
         if not filtres_actifs(params):
             qs = qs[:self.limite_defaut]
@@ -1303,7 +1328,216 @@ class DivorceListView(SmartSecurityMixin, ListView):
         context.update(contexte_filtres_liste(
             self.request, params, 'divorce', self.limite_defaut, self.request.user
         ))
+        context['divorce_verif_url'] = reverse('divorce_verifier_conjoint')
+        context['divorce_recherche_url'] = reverse('recherche_nominative')
+        context['divorce_reinit_url'] = reverse('divorce_reinitialiser_verification')
         return context
+
+
+class DivorceVerificationAPIView(LoginRequiredMixin, View):
+    """Vérification 2 étapes pour identifier un mariage actif (recherche nationale)."""
+
+    def post(self, request):
+        from .verification_divorce import (
+            appliquer_resultat_verif,
+            lire_etat_verif,
+            sauver_etat_verif,
+            verif_complete,
+            verifier_empreinte,
+            verifier_facial,
+            verifier_nominatif,
+            verifier_nominatif_selection,
+        )
+
+        type_verif = request.POST.get('type_verif', '').strip()
+        role = request.POST.get('role', '').strip()
+        if type_verif not in ('empreinte', 'nominative', 'faciale'):
+            return JsonResponse(
+                {'success': False, 'errors': {'type_verif': ['Mode invalide.']}}, status=400
+            )
+        if role not in ('epoux', 'epouse'):
+            return JsonResponse(
+                {'success': False, 'errors': {'role': ['Rôle invalide.']}}, status=400
+            )
+
+        etat = lire_etat_verif(request.session)
+        if role == 'epouse' and not etat.get('epoux_ok'):
+            return JsonResponse({
+                'success': False,
+                'errors': {'role': ['Étape 1/2 : vérifiez d\'abord l\'époux.']},
+            }, status=400)
+
+        try:
+            if type_verif == 'empreinte':
+                resultat = verifier_empreinte(role, request.FILES.get('scan_empreinte'), etat)
+            elif type_verif == 'nominative':
+                personne_id = request.POST.get('personne_id')
+                if personne_id:
+                    resultat = verifier_nominatif_selection(
+                        role, int(personne_id),
+                        request.POST.get('est_epoux') == '1',
+                        etat,
+                    )
+                else:
+                    resultat = verifier_nominatif(
+                        role,
+                        request.POST.get('nom'),
+                        request.POST.get('postnom'),
+                        request.POST.get('prenom'),
+                        etat,
+                    )
+            else:
+                resultat = verifier_facial(role, request.POST.get('image_base64'), etat)
+
+            if not resultat.get('ok'):
+                return JsonResponse({
+                    'success': False,
+                    'echec': True,
+                    'message': resultat['message'],
+                    'match': resultat.get('match'),
+                    'etat': etat,
+                })
+
+            etat = appliquer_resultat_verif(etat, type_verif, role, resultat)
+            sauver_etat_verif(request.session, etat)
+            return JsonResponse({
+                'success': True,
+                'message': resultat['message'],
+                'match': resultat.get('match'),
+                'mariage': resultat.get('mariage'),
+                'role': role,
+                'etat': etat,
+                'complete': verif_complete(etat),
+            })
+        except ValidationError as exc:
+            messages_list = exc.messages if hasattr(exc, 'messages') else [str(exc)]
+            return JsonResponse(
+                {'success': False, 'errors': {'verification': messages_list}}, status=400
+            )
+
+
+class DivorceReinitialiserVerificationAPIView(LoginRequiredMixin, View):
+    def post(self, request):
+        from .verification_divorce import reinitialiser_verif
+        reinitialiser_verif(request.session)
+        return JsonResponse({'success': True})
+
+
+class MariageDossierVerificationAPIView(LoginRequiredMixin, View):
+    """Vérification 2 étapes pour identifier un dossier non validé (commune)."""
+
+    def post(self, request):
+        from .verification_mariage_dossier import (
+            appliquer_resultat_verif,
+            lire_etat_verif,
+            sauver_etat_verif,
+            verif_complete,
+            verifier_empreinte,
+            verifier_facial,
+            verifier_nominatif,
+            verifier_nominatif_selection,
+        )
+
+        type_verif = request.POST.get('type_verif', '').strip()
+        role = request.POST.get('role', '').strip()
+        if type_verif not in ('empreinte', 'nominative', 'faciale'):
+            return JsonResponse(
+                {'success': False, 'errors': {'type_verif': ['Mode invalide.']}}, status=400
+            )
+        if role not in ('epoux', 'epouse'):
+            return JsonResponse(
+                {'success': False, 'errors': {'role': ['Rôle invalide.']}}, status=400
+            )
+
+        etat = lire_etat_verif(request.session)
+        if role == 'epouse' and not etat.get('epoux_ok'):
+            return JsonResponse({
+                'success': False,
+                'errors': {'role': ['Étape 1/2 : vérifiez d\'abord l\'époux.']},
+            }, status=400)
+
+        try:
+            if type_verif == 'empreinte':
+                resultat = verifier_empreinte(
+                    request.user, role, request.FILES.get('scan_empreinte'), etat
+                )
+            elif type_verif == 'nominative':
+                personne_id = request.POST.get('personne_id')
+                if personne_id:
+                    resultat = verifier_nominatif_selection(
+                        request.user, role, int(personne_id),
+                        request.POST.get('est_epoux') == '1',
+                        etat,
+                    )
+                else:
+                    resultat = verifier_nominatif(
+                        request.user, role,
+                        request.POST.get('nom'),
+                        request.POST.get('postnom'),
+                        request.POST.get('prenom'),
+                        etat,
+                    )
+            else:
+                resultat = verifier_facial(
+                    request.user, role, request.POST.get('image_base64'), etat
+                )
+
+            if not resultat.get('ok'):
+                return JsonResponse({
+                    'success': False,
+                    'echec': True,
+                    'message': resultat['message'],
+                    'match': resultat.get('match'),
+                    'etat': etat,
+                })
+
+            etat = appliquer_resultat_verif(etat, type_verif, role, resultat)
+            sauver_etat_verif(request.session, etat)
+            return JsonResponse({
+                'success': True,
+                'message': resultat['message'],
+                'match': resultat.get('match'),
+                'dossier': resultat.get('dossier'),
+                'role': role,
+                'etat': etat,
+                'complete': verif_complete(etat),
+            })
+        except ValidationError as exc:
+            messages_list = exc.messages if hasattr(exc, 'messages') else [str(exc)]
+            return JsonResponse(
+                {'success': False, 'errors': {'verification': messages_list}}, status=400
+            )
+
+
+class MariageDossierReinitialiserVerificationAPIView(LoginRequiredMixin, View):
+    def post(self, request):
+        from .verification_mariage_dossier import reinitialiser_verif
+        reinitialiser_verif(request.session)
+        return JsonResponse({'success': True})
+
+
+class RechercheMariageDossierNominativeAPIView(LoginRequiredMixin, View):
+    """Recherche nominative sur dossiers non validés de la commune (époux + épouse)."""
+
+    def get(self, request):
+        from .recherche_mariage_dossier import (
+            rechercher_dossiers_par_mot_cle,
+            serialiser_dossier_mariage_recherche,
+        )
+
+        mot = request.GET.get('q', '').strip()
+        if not mot:
+            return JsonResponse({'success': True, 'dossiers': [], 'count': 0})
+
+        dossiers = rechercher_dossiers_par_mot_cle(request.user, mot)
+        resultats = [serialiser_dossier_mariage_recherche(d) for d in dossiers]
+
+        return JsonResponse({
+            'success': True,
+            'dossiers': resultats,
+            'count': len(resultats),
+            'filtre': 'dossier_non_valide_commune',
+        })
 
 
 class MariageRechercheDivorceNominativeAPIView(LoginRequiredMixin, View):
@@ -1352,10 +1586,10 @@ class MariageRechercheDivorceEmpreinteAPIView(LoginRequiredMixin, View):
 
 
 class MariageRechercheDivorceFacialeAPIView(LoginRequiredMixin, View):
-    """Recherche faciale sur les mariages actifs."""
+    """Recherche faciale nationale sur les mariages actifs."""
 
     def post(self, request):
-        from .recherche_divorce import queryset_mariages_eligibles_divorce, serialiser_mariage_divorce
+        from .recherche_divorce import rechercher_mariages_facial, serialiser_mariage_divorce
 
         image_base64 = request.POST.get('image_base64', '').strip()
         if not image_base64:
@@ -1380,42 +1614,20 @@ class MariageRechercheDivorceFacialeAPIView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        candidats = []
-        for mariage in queryset_mariages_eligibles_divorce()[:50]:
-            for role, conjoint, label in (
-                ('epoux', mariage.epoux, 'Époux'),
-                ('epouse', mariage.epouse, 'Épouse'),
-            ):
-                encodage = _encodage_facial_conjoint(conjoint)
-                if encodage is None:
-                    continue
-                candidats.append({
-                    'mariage': mariage,
-                    'id': f"{mariage.pk}-{role}",
-                    'encodage': encodage,
-                    'meta': {
-                        'role': role,
-                        'role_label': label,
-                        'nom_complet': f"{conjoint.nom} {conjoint.post_nom} {conjoint.prenom}".strip(),
-                    },
-                })
+        correspondance, candidats = rechercher_mariages_facial(encodage_capture)
 
         if not candidats:
             return JsonResponse({
                 'success': True,
                 'mariages': [],
-                'message': 'Aucune photo faciale enregistrée sur les mariages actifs.',
+                'message': 'Aucune photo faciale enregistrée sur les mariages actifs (base nationale).',
             })
-
-        correspondance = ReconnaissanceFacialeService.meilleure_correspondance(
-            encodage_capture, candidats
-        )
 
         if not correspondance or not correspondance.get('correspondance'):
             return JsonResponse({
                 'success': True,
                 'mariages': [],
-                'message': 'Aucun mariage actif ne correspond à ce visage.',
+                'message': 'Aucun mariage actif ne correspond à ce visage dans la base nationale.',
             })
 
         mariage = correspondance['mariage']
@@ -1547,6 +1759,7 @@ class ActeDivorceDetailView(SmartSecurityMixin, DetailView):
             'mariage__epoux',
             'mariage__epouse',
             'mariage__dossier__commune_enregistrement__ville__province',
+            'mariage__dossier',
         )
 
     def get_context_data(self, **kwargs):
@@ -1668,16 +1881,8 @@ class DossierSyntheseView(LoginRequiredMixin, View):
                     type_paiement=request.POST.get('type_paiement')
                 )
                 
-                caisse, created = CaisseCommune.objects.get_or_create(commune=commune_agent)
-                caisse.solde_actuel += Decimal(montant_verse)
-                caisse.save()
-
-                MouvementCaisse.objects.create(
-                    caisse=caisse,
-                    dossier=dossier,
-                    montant=montant_verse,
-                    agent=request.user
-                )
+                caisse, _ = CaisseCommune.objects.get_or_create(commune=commune_agent)
+                enregistrer_mouvement_entree(caisse, dossier, montant_verse, request.user)
 
                 messages.success(request, f"Dossier créé avec succès ! N° Auto : {dossier.id}. Caisse mise à jour.")
                 return redirect('dossier_list')
@@ -1710,6 +1915,7 @@ class BourgmestreDashboardView(LoginRequiredMixin, TemplateView):
         context.update(stats_dashboard_bourgmestre(commune))
         context['communes_accessibles'] = communes
         context['commune_courante'] = commune
+        context['peut_sortir_caisse'] = utilisateur_peut_sortir_caisse(self.request.user)
         if self.request.user.is_superuser:
             context['role'] = 'SUPER-ADMINISTRATEUR'
         else:
@@ -1744,6 +1950,62 @@ class BourgmestreStatsAPIView(LoginRequiredMixin, View):
             ),
         })
 
+
+class BourgmestreMouvementsAPIView(LoginRequiredMixin, View):
+    """Liste des mouvements de caisse communale (entrées et sorties)."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if not utilisateur_peut_acceder_caisse(request.user):
+            return JsonResponse({'success': False, 'errors': ['Accès refusé.']}, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request):
+        commune = commune_caisse_active(request.user, request.GET.get('commune'))
+        lignes, solde = mouvements_caisse_commune(commune)
+        return JsonResponse({
+            'success': True,
+            'mouvements': lignes,
+            'solde_total': float(solde),
+            'commune_nom': commune.nom if commune else '—',
+            'peut_sortir_caisse': utilisateur_peut_sortir_caisse(request.user),
+        })
+
+
+class BourgmestreSortieCaisseAPIView(LoginRequiredMixin, View):
+    """Retrait de fonds — réservé au bourgmestre."""
+
+    def dispatch(self, request, *args, **kwargs):
+        if not utilisateur_peut_sortir_caisse(request.user):
+            return JsonResponse(
+                {'success': False, 'errors': ['Seul le bourgmestre peut retirer des fonds.']},
+                status=403,
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request):
+        commune = commune_caisse_active(request.user, request.POST.get('commune'))
+        if not commune:
+            return JsonResponse({'success': False, 'errors': ['Commune introuvable.']}, status=400)
+
+        try:
+            montant = Decimal(str(request.POST.get('montant', '0') or '0'))
+        except Exception:
+            return JsonResponse({'success': False, 'errors': ['Montant invalide.']}, status=400)
+
+        caisse, _ = CaisseCommune.objects.get_or_create(commune=commune)
+        try:
+            enregistrer_sortie_caisse(caisse, montant, request.user)
+        except ValidationError as exc:
+            messages_list = exc.messages if hasattr(exc, 'messages') else [str(exc)]
+            return JsonResponse({'success': False, 'errors': messages_list}, status=400)
+
+        lignes, solde = mouvements_caisse_commune(commune)
+        return JsonResponse({
+            'success': True,
+            'message': f'Sortie de {montant:.2f} $ enregistrée.',
+            'mouvements': lignes,
+            'solde_total': float(solde),
+        })
 
 
 def _maj_conjoint_modification(conjoint, prefixe, post_data, fichiers):
@@ -1873,16 +2135,11 @@ def dossier_edit_view(request, pk):
                         caisse, _ = CaisseCommune.objects.get_or_create(
                             commune=dossier.commune_enregistrement
                         )
-                        caisse.solde_actuel += difference
-                        caisse.save()
-                        MouvementCaisse.objects.create(
-                            caisse=caisse,
-                            dossier=dossier,
-                            montant=difference,
-                            agent=request.user,
+                        enregistrer_mouvement_entree(
+                            caisse, dossier, difference, request.user, paiement=paiement
                         )
                 elif montant_verse > 0 and dossier.commune_enregistrement:
-                    Paiement.objects.create(
+                    nouveau_paiement = Paiement.objects.create(
                         dossier=dossier,
                         montant_total_du=total_du,
                         montant_paye=montant_verse,
@@ -1892,13 +2149,8 @@ def dossier_edit_view(request, pk):
                     caisse, _ = CaisseCommune.objects.get_or_create(
                         commune=dossier.commune_enregistrement
                     )
-                    caisse.solde_actuel += montant_verse
-                    caisse.save()
-                    MouvementCaisse.objects.create(
-                        caisse=caisse,
-                        dossier=dossier,
-                        montant=montant_verse,
-                        agent=request.user,
+                    enregistrer_mouvement_entree(
+                        caisse, dossier, montant_verse, request.user, paiement=nouveau_paiement
                     )
 
             messages.success(request, f"Le dossier N° {dossier.numero_dossier} a été modifié avec succès !")

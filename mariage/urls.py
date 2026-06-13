@@ -27,6 +27,8 @@ urlpatterns = [
     path('dashboard/api/stats/', views.DashboardStatsAPIView.as_view(), name='dashboard_stats_api'),
     path('dashboard/bourgmestre/', BourgmestreDashboardView.as_view(), name='bourgmestre_dashboard'),
     path('dashboard/bourgmestre/api/stats/', views.BourgmestreStatsAPIView.as_view(), name='bourgmestre_stats_api'),
+    path('dashboard/bourgmestre/api/mouvements/', views.BourgmestreMouvementsAPIView.as_view(), name='bourgmestre_mouvements_api'),
+    path('dashboard/bourgmestre/api/sortie/', views.BourgmestreSortieCaisseAPIView.as_view(), name='bourgmestre_sortie_api'),
 
     # ==========================
     # 1. ACCUEIL ET CONFIGURATION
@@ -65,6 +67,10 @@ urlpatterns = [
     # ==========================
     path('mariages/', views.MariageListView.as_view(), name='mariage_list'),
     path('mariages/api/recherche-dossier/', views.DossierRechercheMariageAPIView.as_view(), name='mariage_recherche_dossier'),
+    path('mariages/api/recherche-nominative/', views.RechercheMariageDossierNominativeAPIView.as_view(), name='mariage_recherche_nominative'),
+    path('mariages/api/verifier-conjoint/', views.MariageDossierVerificationAPIView.as_view(), name='mariage_verifier_conjoint'),
+    path('mariages/api/reinitialiser-verification/', views.MariageDossierReinitialiserVerificationAPIView.as_view(), name='mariage_reinitialiser_verification'),
+    path('mariages/api/recherche-empreinte/', views.DossierRechercheEmpreinteMariageAPIView.as_view(), name='mariage_recherche_empreinte'),
     path('mariages/api/recherche-faciale/', views.DossierRechercheFacialeMariageAPIView.as_view(), name='mariage_recherche_faciale'),
     path('mariages/api/enregistrer-acte/', views.MariageEnregistrerActeAPIView.as_view(), name='mariage_enregistrer_acte'),
     path('mariages/<int:pk>/', views.MariageDetailView.as_view(), name='mariage_detail'),
@@ -77,6 +83,8 @@ urlpatterns = [
     # 6. RUPTURE ET BIOMÉTRIE
     # ==========================
     path('divorces/', views.DivorceListView.as_view(), name='divorce_list'),
+    path('divorces/api/verifier-conjoint/', views.DivorceVerificationAPIView.as_view(), name='divorce_verifier_conjoint'),
+    path('divorces/api/reinitialiser-verification/', views.DivorceReinitialiserVerificationAPIView.as_view(), name='divorce_reinitialiser_verification'),
     path('divorces/api/recherche-nominative/', views.MariageRechercheDivorceNominativeAPIView.as_view(), name='divorce_recherche_nominative'),
     path('divorces/api/recherche-empreinte/', views.MariageRechercheDivorceEmpreinteAPIView.as_view(), name='divorce_recherche_empreinte'),
     path('divorces/api/recherche-faciale/', views.MariageRechercheDivorceFacialeAPIView.as_view(), name='divorce_recherche_faciale'),

@@ -21,10 +21,7 @@ function showDivorceView(viewId) {
 
 function ouvrirRechercheDivorce() {
     mariageDivorceSelectionne = null;
-    document.getElementById('divorce-resultats-mariages')?.classList.add('d-none');
-    document.getElementById('divorce-table-mariages').innerHTML = '';
-    document.getElementById('divorce-alert-zone').innerHTML = '';
-    arreterWebcamDivorce();
+    window._divorceMariageIdentifie = null;
     showDivorceView('view-recherche-divorce');
 }
 
@@ -291,13 +288,14 @@ document.getElementById('form-enregistrer-divorce')?.addEventListener('submit', 
         });
 });
 
-document.querySelectorAll('#divorceSearchTabs button[data-bs-toggle="pill"]').forEach(function (tab) {
-    tab.addEventListener('shown.bs.tab', function (e) {
-        if (e.target.getAttribute('data-bs-target') !== '#divorce-search-faciale') {
-            arreterWebcamDivorce();
-        }
-    });
-});
+window.onDivorceVerifComplete = function () {
+    const mariage = window._divorceMariageIdentifie;
+    if (mariage) {
+        selectionnerMariageDivorce(mariage);
+    } else {
+        showDivorceAlert('Mariage identifié mais données incomplètes — recommencez la vérification.', 'warning');
+    }
+};
 
 window.ouvrirRechercheDivorce = ouvrirRechercheDivorce;
 window.revenirListeDivorce = revenirListeDivorce;

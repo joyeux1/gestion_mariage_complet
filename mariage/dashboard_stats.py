@@ -10,11 +10,17 @@ from .models import (
     CaisseCommune,
     Divorce,
     Dossier,
-    Epouse,
-    Epoux,
     Mariage,
     MouvementCaisse,
 )
+from .permissions_commune import (
+    acces_toutes_communes,
+    filtrer_divorces_par_acces,
+    filtrer_dossiers_par_acces,
+    libelle_perimetre_dashboard,
+    role_utilisateur,
+)
+from .liste_filtres import filtrer_mariages_par_acces
 
 MOIS_FR = [
     'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
@@ -22,7 +28,30 @@ MOIS_FR = [
 ]
 
 
-def _evolution_mariages_mensuelle():
+def _querysets_perimetre(user):
+    """Querysets mariages / dossiers / divorces selon le périmètre de l'utilisateur."""
+    if not user or not user.is_authenticated:
+        return (
+            Mariage.objects.all(),
+            Dossier.objects.all(),
+            Divorce.objects.all(),
+        )
+
+    if role_utilisateur(user) == 'CITOYEN' or acces_toutes_communes(user):
+        return (
+            Mariage.objects.all(),
+            Dossier.objects.all(),
+            Divorce.objects.all(),
+        )
+
+    return (
+        filtrer_mariages_par_acces(user),
+        filtrer_dossiers_par_acces(user),
+        filtrer_divorces_par_acces(user),
+    )
+
+
+def _evolution_mariages_mensuelle(mariages_qs):
     """Nombre de mariages sur les 6 derniers mois calendaires."""
     today = timezone.localdate()
     labels = []
@@ -41,7 +70,7 @@ def _evolution_mariages_mensuelle():
         else:
             end = start.replace(month=month + 1, day=1)
         data.append(
-            Mariage.objects.filter(
+            mariages_qs.filter(
                 date_enregistrement__date__gte=start,
                 date_enregistrement__date__lt=end,
             ).count()
@@ -50,7 +79,7 @@ def _evolution_mariages_mensuelle():
     return labels, data
 
 
-def _variation_mariages_mois():
+def _variation_mariages_mois(mariages_qs):
     """Variation en % des mariages ce mois vs le mois précédent."""
     now = timezone.now()
     debut_mois = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -59,8 +88,8 @@ def _variation_mariages_mois():
     else:
         debut_mois_prec = debut_mois.replace(month=debut_mois.month - 1)
 
-    ce_mois = Mariage.objects.filter(date_enregistrement__gte=debut_mois).count()
-    mois_prec = Mariage.objects.filter(
+    ce_mois = mariages_qs.filter(date_enregistrement__gte=debut_mois).count()
+    mois_prec = mariages_qs.filter(
         date_enregistrement__gte=debut_mois_prec,
         date_enregistrement__lt=debut_mois,
     ).count()
@@ -73,21 +102,27 @@ def _variation_mariages_mois():
     return ce_mois, pct, direction
 
 
-def _taux_succes_dossiers():
-    total = Dossier.objects.count()
+def _taux_succes_dossiers(dossiers_qs):
+    total = dossiers_qs.count()
     if not total:
         return 0, 0, 0
-    valides = Dossier.objects.filter(statut='valide').count()
-    avec_mariage = Mariage.objects.count()
+    valides = dossiers_qs.filter(statut='valide').count()
     taux = round(valides / total * 100)
     return taux, valides, total
 
 
-def _activites_recentes(limit=8):
+def _citoyens_perimetre(dossiers_qs):
+    """Époux et épouses liés aux dossiers du périmètre."""
+    epoux = dossiers_qs.exclude(epoux_id__isnull=True).values('epoux_id').distinct().count()
+    epouses = dossiers_qs.exclude(epouse_id__isnull=True).values('epouse_id').distinct().count()
+    return epoux + epouses
+
+
+def _activites_recentes(mariages_qs, divorces_qs, limit=8):
     activites = []
 
     for mariage in (
-        Mariage.objects.select_related('epoux', 'epouse')
+        mariages_qs.select_related('epoux', 'epouse')
         .order_by('-date_enregistrement')[:limit]
     ):
         activites.append({
@@ -103,7 +138,7 @@ def _activites_recentes(limit=8):
         })
 
     for divorce in (
-        Divorce.objects.select_related('mariage__epoux', 'mariage__epouse')
+        divorces_qs.select_related('mariage__epoux', 'mariage__epouse')
         .order_by('-date_enregistrement')[:limit]
     ):
         activites.append({
@@ -124,33 +159,38 @@ def _activites_recentes(limit=8):
     return activites[:limit]
 
 
-def stats_dashboard_general():
-    labels, stats_mensuelles = _evolution_mariages_mensuelle()
-    _, variation_pct, variation_dir = _variation_mariages_mois()
-    taux_succes, dossiers_valides, total_dossiers = _taux_succes_dossiers()
+def stats_dashboard_general(user=None):
+    """Statistiques du tableau de bord filtrées selon le périmètre de l'utilisateur."""
+    mariages_qs, dossiers_qs, divorces_qs = _querysets_perimetre(user)
+    labels, stats_mensuelles = _evolution_mariages_mensuelle(mariages_qs)
+    _, variation_pct, variation_dir = _variation_mariages_mois(mariages_qs)
+    taux_succes, dossiers_valides, total_dossiers = _taux_succes_dossiers(dossiers_qs)
 
     return {
-        'total_mariages': Mariage.objects.count(),
-        'mariages_actifs': Mariage.objects.filter(statut='actif').count(),
-        'total_divorces': Divorce.objects.count(),
-        'dossiers_en_cours': Dossier.objects.filter(
+        'total_mariages': mariages_qs.count(),
+        'mariages_actifs': mariages_qs.filter(statut='actif').count(),
+        'total_divorces': divorces_qs.count(),
+        'dossiers_en_cours': dossiers_qs.filter(
             statut__in=('en_attente', 'en_cours')
         ).count(),
         'dossiers_valides': dossiers_valides,
         'total_dossiers': total_dossiers,
-        'total_epoux': Epoux.objects.count() + Epouse.objects.count(),
+        'total_epoux': _citoyens_perimetre(dossiers_qs),
         'taux_succes': taux_succes,
         'variation_mariages_pct': variation_pct,
         'variation_mariages_dir': variation_dir,
         'chart_labels': labels,
         'chart_data': stats_mensuelles,
-        'activites_recentes': _activites_recentes(),
+        'activites_recentes': _activites_recentes(mariages_qs, divorces_qs),
+        'perimetre_label': libelle_perimetre_dashboard(user) if user else '',
         'now': timezone.now(),
     }
 
 
 def _recettes_sept_jours(caisse):
-    """Recettes par jour sur les 7 derniers jours (jours sans mouvement = 0)."""
+    """Recettes nettes par jour sur les 7 derniers jours (entrées − sorties)."""
+    from django.db.models import Case, F, When
+
     today = timezone.localdate()
     jours = [today - timedelta(days=i) for i in range(6, -1, -1)]
     totaux = {jour: Decimal('0.00') for jour in jours}
@@ -162,7 +202,14 @@ def _recettes_sept_jours(caisse):
         )
         .annotate(jour=TruncDate('date_mouvement'))
         .values('jour')
-        .annotate(total=Sum('montant'))
+        .annotate(
+            total=Sum(
+                Case(
+                    When(type_mouvement='sortie', then=-F('montant')),
+                    default=F('montant'),
+                )
+            )
+        )
     )
     for row in mouvements:
         if row['jour'] in totaux:

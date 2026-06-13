@@ -76,6 +76,9 @@ class Utilisateur(AbstractUser):
     ]
 
     telephone = models.CharField(max_length=20, blank=True)
+    nom = models.CharField(max_length=100, blank=True, help_text="Nom de famille (actes officiels).")
+    post_nom = models.CharField(max_length=100, blank=True, help_text="Postnom (actes officiels).")
+    prenom = models.CharField(max_length=100, blank=True, help_text="Prénom (actes officiels).")
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     commune = models.ForeignKey(
         Commune, on_delete=models.CASCADE, null=True, blank=True,
@@ -105,6 +108,22 @@ class Utilisateur(AbstractUser):
 
     def __str__(self):
         return f"{self.username} - {self.role}"
+
+    def nom_complet_officiel(self):
+        """Nom, postnom et prénom pour les actes (bourgmestre, maire, etc.)."""
+        if self.nom or self.post_nom or self.prenom:
+            return ' '.join(
+                part for part in (self.nom, self.post_nom, self.prenom) if part
+            ).strip()
+        nom = (self.last_name or '').strip()
+        tokens = (self.first_name or '').strip().split()
+        if len(tokens) >= 2:
+            postnom, prenom = tokens[0], ' '.join(tokens[1:])
+        elif len(tokens) == 1:
+            postnom, prenom = '', tokens[0]
+        else:
+            postnom, prenom = '', ''
+        return ' '.join(part for part in (nom, postnom, prenom) if part).strip()
 
 # ================================================
 # EMPREINTE DIGITALE
@@ -324,13 +343,44 @@ class CaisseCommune(models.Model):
         return f"Caisse {self.commune.nom} : {self.solde_actuel} $"
 
 class MouvementCaisse(models.Model):
-    caisse = models.ForeignKey(CaisseCommune, on_delete=models.CASCADE, related_name='mouvements')
-    dossier = models.ForeignKey('Dossier', on_delete=models.CASCADE)
-    montant = models.DecimalField(max_digits=10, decimal_places=2)
-    date_mouvement = models.DateTimeField(auto_now_add=True)
+    TYPE_MOUVEMENT = [
+        ('entree', 'Entrée'),
+        ('sortie', 'Sortie'),
+    ]
 
-    # Utilisez settings.AUTH_USER_MODEL comme cible du ForeignKey
-    agent = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)        
+    caisse = models.ForeignKey(CaisseCommune, on_delete=models.CASCADE, related_name='mouvements')
+    type_mouvement = models.CharField(max_length=10, choices=TYPE_MOUVEMENT, default='entree')
+    motif = models.CharField(max_length=200, blank=True)
+    dossier = models.ForeignKey('Dossier', on_delete=models.CASCADE, null=True, blank=True)
+    paiement = models.ForeignKey(
+        Paiement, on_delete=models.SET_NULL, null=True, blank=True, related_name='mouvements_caisse'
+    )
+    montant = models.DecimalField(max_digits=10, decimal_places=2)
+    montant_total_du = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    montant_paye = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    date_mouvement = models.DateTimeField(auto_now_add=True)
+    agent = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = 'Mouvement de caisse'
+        verbose_name_plural = 'Mouvements de caisse'
+        ordering = ['-date_mouvement']
+
+    def __str__(self):
+        sens = '+' if self.type_mouvement == 'entree' else '−'
+        return f"{sens}{self.montant} $ — {self.motif or self.get_type_mouvement_display()}"
+
+    @property
+    def montant_net(self):
+        if self.type_mouvement == 'sortie':
+            return -self.montant
+        return self.montant
+
+    @property
+    def montant_restant(self):
+        if self.montant_total_du is not None and self.montant_paye is not None:
+            return self.montant_total_du - self.montant_paye
+        return None
 
 
 # ====================================================

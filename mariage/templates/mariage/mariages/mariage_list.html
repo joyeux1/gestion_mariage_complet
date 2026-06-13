@@ -6,6 +6,7 @@
 {% block content %}
 <div class="container-fluid" id="mariage-app-container"
      data-recherche-url="{% url 'mariage_recherche_dossier' %}"
+     data-recherche-empreinte-url="{% url 'mariage_recherche_empreinte' %}"
      data-recherche-faciale-url="{% url 'mariage_recherche_faciale' %}"
      data-enregistrer-url="{% url 'mariage_enregistrer_acte' %}">
     <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
@@ -110,98 +111,12 @@
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm d-none" id="view-recherche-dossier">
-        <div class="card-header bg-white py-3 border-0">
-            <div class="d-flex justify-content-between align-items-center">
-                <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-search me-2"></i> Recherche & Validation du Dossier</h4>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="resetToListView()"><i class="bi bi-arrow-left"></i> Retour</button>
-            </div>
+    <div class="d-none" id="view-recherche-dossier">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-search me-2"></i> Recherche & validation du dossier</h4>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="resetToListView()"><i class="bi bi-arrow-left"></i> Retour</button>
         </div>
-        <div class="card-body">
-            <ul class="nav nav-pills nav-justified mb-4" id="searchTabs" role="tablist">
-                <li class="nav-item">
-                    <button class="nav-link active" id="biometrie-tab" data-bs-toggle="pill" data-bs-target="#search-biometrie" type="button"><i class="bi bi-fingerprint me-2"></i>1. Empreintes</button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link" id="identite-tab" data-bs-toggle="pill" data-bs-target="#search-identite" type="button"><i class="bi bi-person-text me-2"></i>2. Nominative</button>
-                </li>
-                <li class="nav-item">
-                    <button class="nav-link" id="faciale-tab" data-bs-toggle="pill" data-bs-target="#search-faciale" type="button"><i class="bi bi-camera-video me-2"></i>3. Reconnaissance faciale</button>
-                </li>
-            </ul>
-
-            <div class="tab-content border p-4 rounded bg-light">
-                <div class="tab-pane fade show active text-center py-4" id="search-biometrie">
-                    <div class="biometrie-trigger" onclick="simulerScanBiometriqueMariage()" style="cursor:pointer;">
-                        <i class="bi bi-fingerprint text-primary display-1"></i>
-                        <h5 class="mt-3">Posez l'empreinte sur le lecteur</h5>
-                        <p class="text-muted small">Recherche automatique des dossiers validés (époux + épouse renseignés)</p>
-                    </div>
-                </div>
-                <div class="tab-pane fade" id="search-identite">
-                    <div class="row g-3">
-                        <div class="col-md-4"><input type="text" id="s_nom" class="form-control" placeholder="Nom..."></div>
-                        <div class="col-md-4"><input type="text" id="s_postnom" class="form-control" placeholder="Postnom..."></div>
-                        <div class="col-md-4"><input type="text" id="s_prenom" class="form-control" placeholder="Prénom..."></div>
-                        <div class="col-12 text-end">
-                            <button type="button" class="btn btn-primary" onclick="executerRechercheDossier()"><i class="bi bi-search me-2"></i>Lancer la recherche</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="tab-pane fade" id="search-faciale">
-                    <div class="row justify-content-center">
-                        <div class="col-lg-8 text-center">
-                            <p class="text-muted small mb-3">
-                                Placez le visage de la personne devant la webcam, capturez la photo puis lancez la recherche dans les dossiers enregistrés.
-                            </p>
-                            <div class="d-flex flex-wrap justify-content-center align-items-center gap-3 mb-3 p-3 bg-white rounded-4 border border-primary border-opacity-25">
-                                <div class="rounded-circle overflow-hidden bg-dark border border-2 border-primary flex-shrink-0"
-                                     style="width: 160px; height: 160px;">
-                                    <video id="mariage-facial-webcam" autoplay playsinline
-                                           style="width: 100%; height: 100%; object-fit: cover;"></video>
-                                </div>
-                                <div id="mariage-facial-apercu" class="rounded-circle overflow-hidden border border-2 border-success flex-shrink-0 d-none"
-                                     style="width: 160px; height: 160px;">
-                                    <img id="mariage-facial-apercu-img" src="" alt="Capture" class="w-100 h-100" style="object-fit: cover;">
-                                </div>
-                            </div>
-                            <canvas id="mariage-facial-canvas" class="d-none"></canvas>
-                            <input type="hidden" id="mariage-facial-base64" value="">
-                            <div class="d-flex flex-wrap justify-content-center gap-2">
-                                <button type="button" class="btn btn-outline-primary" id="mariage-facial-camera-btn">
-                                    <i class="bi bi-camera-video me-2"></i>Démarrer la caméra
-                                </button>
-                                <button type="button" class="btn btn-success" id="mariage-facial-search-btn" disabled>
-                                    <i class="bi bi-person-bounding-box me-2"></i>Rechercher par visage
-                                </button>
-                            </div>
-                            <p class="text-muted small mt-3 mb-0">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Compare le visage capturé aux photos des dossiers (carte d'électeur ou biométrie).
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="resultats-dossiers-container" class="mt-4 d-none">
-                <h5 class="fw-bold mb-3">Dossiers correspondants</h5>
-                <div class="table-responsive">
-                    <table class="table table-bordered align-middle bg-white">
-                        <thead class="table-light">
-                            <tr>
-                                <th>N° Dossier</th>
-                                <th class="text-center">Carte / Photo Époux</th>
-                                <th class="text-center">Carte / Photo Épouse</th>
-                                <th>Futurs Époux</th>
-                                <th class="text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="table-resultat-dossiers"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+        {% include 'mariage/partials/verif_deux_etapes.html' with verif_mode='mariage' verif_nominative_single=True verif_title='Identification du dossier (obligatoire)' verif_icon='bi-heart-fill' verif_scope_badge=commune_recherche_mariage|default:'Votre commune' verif_scope_badge_class='bg-primary' verif_url=mariage_verif_url recherche_url=mariage_recherche_url reinit_url=mariage_reinit_url verif_procedure_html='Recherche limitée aux <strong>dossiers non validés</strong> de votre commune. <strong>Nominative :</strong> un seul champ interroge les noms des époux et des épouses. <strong>Empreintes / faciale :</strong> procédure en 2 étapes (époux puis épouse sur le même dossier).' verif_nominative_help='Un seul champ suffit : saisissez un nom, postnom ou prénom (époux <strong>ou</strong> épouse). Les résultats affichent les dossiers non validés de votre commune — cliquez pour ouvrir le formulaire d\'acte.' verif_empreinte_help='Empreinte comparée aux dossiers <strong>non validés</strong> de votre commune (même logique biométrique que l\'anti-polygamie), en 2 étapes.' verif_faciale_help='Reconnaissance faciale sur les dossiers <strong>non validés</strong> de votre commune (2 étapes : époux puis épouse).' verif_epoux_label='Minimum 2 caractères — recherche sur les noms des époux et épouses des dossiers non validés de votre commune.' %}
     </div>
 
     <div class="card border-0 shadow-sm d-none" id="view-formulaire-generation">
@@ -283,7 +198,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'mariage/js/mariage_list.js' %}"></script>
+<script src="{% static 'mariage/js/workflow_verification.js' %}?v=3"></script>
+<script src="{% static 'mariage/js/mariage_list.js' %}?v=3"></script>
 <script>
     document.getElementById('form-date-mariage').valueAsDate = new Date();
 

@@ -1,0 +1,249 @@
+{# Workflow 2 étapes (époux / épouse) — nominative, empreinte, faciale #}
+<div class="card shadow border-0 mb-4" id="workflow-verif-container"
+     data-mode="{{ verif_mode }}"
+     data-verif-url="{{ verif_url }}"
+     data-recherche-url="{{ recherche_url }}"
+     data-capture-create-url="{% url 'mobile_capture_creer' %}"
+     data-tunnel-url="{% url 'mobile_capture_tunnel' %}"
+     data-reinit-url="{{ reinit_url|default:'' }}">
+    <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi {{ verif_icon|default:'bi-shield-exclamation' }} me-2 text-warning"></i> {{ verif_title }}</span>
+        <div class="d-flex align-items-center gap-2">
+            {% if verif_scope_badge %}
+            <span class="badge {{ verif_scope_badge_class|default:'bg-secondary' }}">{{ verif_scope_badge }}</span>
+            {% endif %}
+            <button type="button" class="btn btn-sm btn-outline-warning btn-reinit-workflow-verif" title="Recommencer">
+                <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+            <span class="badge bg-warning text-dark" id="verif-progress-badge">Étape 1/2 — Futur époux</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+        <p class="text-muted small mb-3">{{ verif_procedure_html|safe }}</p>
+
+        <ul class="nav nav-pills nav-justified mb-3" id="dossierVerifTabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#verif-nominative" type="button">
+                    <i class="bi bi-person-text me-1"></i> 1. Nominative
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#verif-empreinte" type="button">
+                    <i class="bi bi-fingerprint me-1"></i> 2. Empreintes
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#verif-faciale" type="button">
+                    <i class="bi bi-camera-video me-1"></i> 3. Reconnaissance faciale
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content border rounded bg-light p-4">
+            <div class="tab-pane fade show active" id="verif-nominative">
+                <p class="small text-muted mb-3">{{ verif_nominative_help|safe }}</p>
+                {% if verif_nominative_single %}
+                <div class="row justify-content-center" id="verif-nominative-mariage-single">
+                    <div class="col-lg-8">
+                        <div class="card border-success border-opacity-50">
+                            <div class="card-header bg-success bg-opacity-10 fw-bold text-success py-2">
+                                <i class="bi bi-search me-1"></i> Recherche nominative — dossiers non validés
+                            </div>
+                            <div class="card-body">
+                                <label class="form-label small fw-bold">Mot-clé (nom, postnom ou prénom de l'époux ou de l'épouse)</label>
+                                <div class="verif-nom-saisie-wrap position-relative">
+                                    <input type="text" class="form-control" id="recherche-dossier-mariage"
+                                           placeholder="Ex: KASEREKA, KAVIRA, MBUSA, Alliance…" autocomplete="off">
+                                    <div class="list-group list-group-flush small verif-nom-propositions d-none" id="resultats-dossiers-mariage"
+                                         style="max-height:400px;overflow:auto;border:1px solid #dee2e6;border-radius:0.375rem;box-shadow:0 0.35rem 0.75rem rgba(0,0,0,.08);background:#fff;margin-top:0.35rem;"></div>
+                                </div>
+                                <p class="small text-muted mb-0 mt-2" id="recherche-dossier-mariage-label">
+                                    {{ verif_epoux_label|default:"Saisissez au moins 2 caractères — la recherche interroge les époux et épouses des dossiers non validés de votre commune." }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-primary border-opacity-50" id="verif-nom-epoux-card">
+                            <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                <i class="bi bi-1-circle me-1"></i> Futur époux
+                                <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                            </div>
+                            <div class="card-body">
+                                <label class="form-label small fw-bold">Mot-clé (nom, postnom ou prénom)</label>
+                                <div class="verif-nom-saisie-wrap position-relative">
+                                    <input type="text" class="form-control form-control-sm mb-0" id="recherche-epoux"
+                                           placeholder="Ex: KASEREKA, MBUSA, Joyeux…" autocomplete="off">
+                                    <div class="list-group list-group-flush small verif-nom-propositions d-none" id="resultats-epoux"
+                                         style="max-height:320px;overflow:auto;border:1px solid #dee2e6;border-radius:0.375rem;box-shadow:0 0.35rem 0.75rem rgba(0,0,0,.08);background:#fff;margin-top:0.35rem;"></div>
+                                </div>
+                                <input type="hidden" id="selection-epoux-id">
+                                <input type="hidden" id="selection-epoux-est-epoux" value="1">
+                                <input type="hidden" id="selection-epoux-profil" value="0">
+                                <p class="small text-muted mb-0 mt-2" id="selection-epoux-label">{{ verif_epoux_label }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-nom-epouse-card">
+                            <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                <i class="bi bi-2-circle me-1"></i> Future épouse
+                                <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                            </div>
+                            <div class="card-body">
+                                <label class="form-label small fw-bold">Mot-clé (nom, postnom ou prénom)</label>
+                                <div class="verif-nom-saisie-wrap position-relative">
+                                    <input type="text" class="form-control form-control-sm mb-0" id="recherche-epouse"
+                                           placeholder="Ex: KAVIRA, MASIKA, Alliance…" disabled autocomplete="off">
+                                    <div class="list-group list-group-flush small verif-nom-propositions d-none" id="resultats-epouse"
+                                         style="max-height:320px;overflow:auto;border:1px solid #dee2e6;border-radius:0.375rem;box-shadow:0 0.35rem 0.75rem rgba(0,0,0,.08);background:#fff;margin-top:0.35rem;"></div>
+                                </div>
+                                <input type="hidden" id="selection-epouse-id">
+                                <input type="hidden" id="selection-epouse-est-epoux" value="0">
+                                <input type="hidden" id="selection-epouse-profil" value="0">
+                                <p class="small text-muted mb-0 mt-2" id="selection-epouse-label">Disponible après validation de l'époux.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="tab-pane fade" id="verif-empreinte">
+                <div id="tunnel-empreinte-status" class="alert alert-info small mb-3 d-none" role="status"></div>
+                <p class="small text-muted mb-3">{{ verif_empreinte_help|safe }}</p>
+                <div class="row g-4">
+                    <div class="col-md-6" id="verif-empreinte-epoux-card">
+                        <div class="card h-100 border-primary border-opacity-50">
+                            <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                <i class="bi bi-1-circle me-1"></i> Futur époux
+                                <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                            </div>
+                            <div class="card-body">
+                                <label class="form-label small fw-bold">Scan d'empreinte digitale</label>
+                                <input type="file" class="form-control form-control-sm" id="empreinte-epoux-file" accept="image/*,.bmp,.png,.jpg,.jpeg">
+                                <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100 btn-mobile-capture" data-type-capture="empreinte" data-role="epoux">
+                                    <i class="bi bi-phone me-1"></i> Capturer depuis le téléphone
+                                </button>
+                                <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mt-2 mx-auto"
+                                     id="mobile-qr-empreinte-epoux" style="width:120px;height:120px;"><span class="small text-muted">QR code</span></div>
+                                <div class="small text-muted mt-1 mobile-capture-status" id="mobile-status-empreinte-epoux"></div>
+                                <button type="button" class="btn btn-primary btn-sm mt-3 w-100 btn-verif-conjoint" data-type="empreinte" data-role="epoux">
+                                    <i class="bi bi-shield-check me-1"></i> Vérifier l'époux
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-empreinte-epouse-card">
+                            <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                <i class="bi bi-2-circle me-1"></i> Future épouse
+                                <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                            </div>
+                            <div class="card-body">
+                                <label class="form-label small fw-bold">Scan d'empreinte digitale</label>
+                                <input type="file" class="form-control form-control-sm" id="empreinte-epouse-file" accept="image/*,.bmp,.png,.jpg,.jpeg" disabled>
+                                <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100 btn-mobile-capture" disabled data-type-capture="empreinte" data-role="epouse">
+                                    <i class="bi bi-phone me-1"></i> Capturer depuis le téléphone
+                                </button>
+                                <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mt-2 mx-auto opacity-50"
+                                     id="mobile-qr-empreinte-epouse" style="width:120px;height:120px;"><span class="small text-muted">QR code</span></div>
+                                <div class="small text-muted mt-1 mobile-capture-status" id="mobile-status-empreinte-epouse"></div>
+                                <button type="button" class="btn btn-danger btn-sm mt-3 w-100 btn-verif-conjoint" disabled data-type="empreinte" data-role="epouse">
+                                    <i class="bi bi-shield-check me-1"></i> Vérifier l'épouse
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="verif-faciale">
+                <div id="tunnel-faciale-status" class="alert alert-info small mb-3 d-none" role="status"></div>
+                <p class="small text-muted mb-3">{{ verif_faciale_help|safe }}</p>
+                <div class="row g-4">
+                    <div class="col-md-6" id="verif-face-epoux-card">
+                        <div class="card h-100 border-primary border-opacity-50">
+                            <div class="card-header bg-primary bg-opacity-10 fw-bold text-primary py-2">
+                                <i class="bi bi-1-circle me-1"></i> Futur époux
+                                <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="rounded-circle overflow-hidden bg-secondary mx-auto mb-2 border border-primary position-relative" style="width:160px;height:160px;">
+                                    <video id="dossier-webcam-epoux" autoplay playsinline muted class="w-100 h-100" style="object-fit:cover;"></video>
+                                </div>
+                                <p class="small text-muted mb-2" id="dossier-webcam-status-epoux">Ouvrez la webcam ou importez une photo.</p>
+                                <canvas id="dossier-canvas-epoux" class="d-none"></canvas>
+                                <input type="hidden" id="dossier-base64-epoux" value="">
+                                <input type="file" id="dossier-file-epoux" class="form-control form-control-sm mb-2" accept="image/*" capture="user">
+                                <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="dossier-capture-epoux-btn" disabled>
+                                    <i class="bi bi-camera me-1"></i> Capturer depuis webcam
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm mb-2 w-100 btn-mobile-capture" data-type-capture="photo" data-role="epoux">
+                                    <i class="bi bi-phone me-1"></i> Photo depuis le téléphone
+                                </button>
+                                <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mb-2 mx-auto"
+                                     id="mobile-qr-photo-epoux" style="width:120px;height:120px;"><span class="small text-muted">QR code</span></div>
+                                <div class="small text-muted mb-2 mobile-capture-status" id="mobile-status-photo-epoux"></div>
+                                <button type="button" class="btn btn-primary btn-sm w-100 btn-verif-conjoint" data-type="faciale" data-role="epoux">
+                                    <i class="bi bi-person-bounding-box me-1"></i> Vérifier l'époux
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-danger border-opacity-50 opacity-50" id="verif-face-epouse-card">
+                            <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger py-2">
+                                <i class="bi bi-2-circle me-1"></i> Future épouse
+                                <span class="verif-ok-badge float-end d-none"><i class="bi bi-check-circle-fill text-success"></i></span>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="rounded-circle overflow-hidden bg-secondary mx-auto mb-2 border border-danger position-relative" style="width:160px;height:160px;">
+                                    <video id="dossier-webcam-epouse" autoplay playsinline muted class="w-100 h-100" style="object-fit:cover;"></video>
+                                </div>
+                                <p class="small text-muted mb-2" id="dossier-webcam-status-epouse">En attente de la vérification de l'époux.</p>
+                                <canvas id="dossier-canvas-epouse" class="d-none"></canvas>
+                                <input type="hidden" id="dossier-base64-epouse" value="">
+                                <input type="file" id="dossier-file-epouse" class="form-control form-control-sm mb-2" accept="image/*" capture="user" disabled>
+                                <button type="button" class="btn btn-outline-danger btn-sm mb-2" id="dossier-capture-epouse-btn" disabled>
+                                    <i class="bi bi-camera me-1"></i> Capturer depuis webcam
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm mb-2 w-100 btn-mobile-capture" disabled data-type-capture="photo" data-role="epouse">
+                                    <i class="bi bi-phone me-1"></i> Photo depuis le téléphone
+                                </button>
+                                <div class="mobile-capture-qr-box border rounded bg-white d-flex align-items-center justify-content-center mb-2 mx-auto opacity-50"
+                                     id="mobile-qr-photo-epouse" style="width:120px;height:120px;"><span class="small text-muted">QR code</span></div>
+                                <div class="small text-muted mb-2 mobile-capture-status" id="mobile-status-photo-epouse"></div>
+                                <button type="button" class="btn btn-danger btn-sm w-100 btn-verif-conjoint" disabled data-type="faciale" data-role="epouse">
+                                    <i class="bi bi-person-bounding-box me-1"></i> Vérifier l'épouse
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="verif-alert-zone" class="mt-3"></div>
+        <div id="verif-match-zone" class="mt-3"></div>
+
+        <div class="modal fade" id="modalPhotoNomVerif" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title fw-bold" id="modalPhotoNomVerifLabel">Photo</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                    </div>
+                    <div class="modal-body text-center pt-2 pb-4 px-4">
+                        <img id="modalPhotoNomVerifImg" src="" alt="" class="img-fluid rounded shadow-sm"
+                             style="max-height:75vh;width:auto;max-width:100%;object-fit:contain;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

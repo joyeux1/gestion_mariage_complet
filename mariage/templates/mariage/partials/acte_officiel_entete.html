@@ -1,0 +1,83 @@
+{% load static acte_officiel %}
+<table class="acte-entete-table acte-entete-{{ type|default:'mariage' }}" cellspacing="0" cellpadding="0">
+    <tr valign="top">
+        <td class="entete-cell entete-gauche">
+            {% if type == 'divorce' %}
+            <img class="acte-img-embleme" src="{% static 'mariage/img/armoiries_rdc.png' %}?v=1" alt="Armoiries RDC">
+            {% endif %}
+            <div class="acte-administratif">
+                <div class="ligne-ministere">Ministère de l'Intérieur{% if type == 'divorce' %}, et Sécurité{% else %}, Décentralisation et Sécurité{% endif %}</div>
+                {% if commune %}
+                <div class="ligne-titre">PROVINCE DU {{ commune.ville.province.nom|upper }}</div>
+                <div class="ligne-titre">VILLE DE {{ commune.ville.nom|upper }}</div>
+                <div class="ligne-titre">COMMUNE DE {{ commune.nom|upper }}</div>
+                {% else %}
+                <div class="ligne-titre">PROVINCE DU NORD-KIVU</div>
+                <div class="ligne-titre">VILLE DE ................................</div>
+                <div class="ligne-titre">COMMUNE DE ................................</div>
+                {% endif %}
+                {% if type != 'divorce' %}
+                <div class="ligne-titre">OFFICE DE L'ETAT CIVIL</div>
+                {% endif %}
+                {% if commune and type == 'divorce' %}
+                <div class="acte-email">{{ commune.nom|lower }}commune@gmail.com</div>
+                {% endif %}
+            </div>
+        </td>
+
+        <td class="entete-cell entete-centre">
+            {% if type != 'divorce' %}
+            <div class="acte-centre-haut">
+                <img class="acte-img-drapeau-inline" src="{% static 'mariage/img/drapeau_rdc.svg' %}" alt="Drapeau RDC">
+                <div class="acte-centre-titres">
+                    <div class="rdc-titre">REPUBLIQUE DEMOCRATIQUE DU CONGO</div>
+                    <div class="acte-titre-principal">{{ acte_titre }}</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="rdc-titre">REPUBLIQUE DEMOCRATIQUE DU CONGO</div>
+            <div class="acte-titre-principal">{{ acte_titre }}</div>
+            {% endif %}
+            {% if numero_acte %}
+            <div class="acte-meta acte-meta-ligne">
+                N° {% champ_acte numero_acte "medium" %}/{% if annee_court %}{{ annee_court }}{% else %}..{% endif %}{% points "short" %},
+                Volume {% points "medium" %}/{% points "short" %}{% points "short" %},
+                Folio {% points "medium" %}/{% points "short" %}{% points "short" %}
+            </div>
+            {% endif %}
+            {% if numero_divorce %}
+            <div class="acte-meta">Réf. {% champ_acte numero_divorce "medium" %}</div>
+            {% endif %}
+        </td>
+
+        <td class="entete-cell entete-droite">
+            {% if type == 'divorce' %}
+            <img class="acte-img-drapeau-inline entete-drapeau-droite" src="{% static 'mariage/img/drapeau_rdc.svg' %}" alt="Drapeau RDC">
+            {% else %}
+            <div class="acte-droite-haut">
+                <img class="acte-img-embleme" src="{% static 'mariage/img/armoiries_rdc.png' %}?v=1" alt="Armoiries RDC">
+                {% if show_photos %}
+                <div class="acte-photos-couple">
+                    <div class="acte-photo-box">
+                        <span>Conjoint</span>
+                        <div class="acte-photo-inner">
+                            {% if epoux.photo_affichage %}
+                            <img src="{{ epoux.photo_affichage.url }}" alt="Conjoint">
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="acte-photo-box">
+                        <span>Conjointe</span>
+                        <div class="acte-photo-inner">
+                            {% if epouse.photo_affichage %}
+                            <img src="{{ epouse.photo_affichage.url }}" alt="Conjointe">
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </td>
+    </tr>
+</table>

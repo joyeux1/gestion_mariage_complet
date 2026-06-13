@@ -1,0 +1,58 @@
+{% load acte_officiel %}
+{% with commune=divorce.mariage.dossier.commune_enregistrement mariage=divorce.mariage epoux=mariage.epoux epouse=mariage.epouse %}
+{% autorite_acte mariage.dossier as autorite %}
+<div class="acte-officiel-page">
+    <div class="acte-cadre acte-cadre-divorce">
+        {% include 'mariage/partials/acte_officiel_entete.html' with type='divorce' acte_titre="ATTESTATION DE DECLARATIONS DE DIVORCE" numero_divorce=divorce.numero_divorce commune=commune show_photos=False %}
+
+        <div class="acte-corps acte-corps-divorce">
+            <p>
+                Je soussigné {% if autorite.nom %}<span class="acte-nom-officier">{{ autorite.nom|upper }}</span>{% else %}{% champ_acte "" "xlong" %}{% endif %},
+                {{ autorite.titre_officier }} {{ autorite.titre_fonction }}, atteste par la présente, que le (la) nommé(e)
+                {% champ_acte epoux|nom_complet_conjoint "xlong" %}
+            </p>
+            <p>
+                né(e) à {% champ_acte epoux.lieu_naissance "medium" %}, le {% champ_acte epoux.date_naissance|date:"d/m/Y" "medium" %}, fils (fille) de
+                {% champ_acte epoux.nom_pere "medium" %} et de {% champ_acte epoux.nom_mere "medium" %},
+            </p>
+            <p>
+                originaire de {% champ_acte epoux.ville_origine "medium" %}, Groupement de {% champ_acte epoux.cellule "medium" %},
+                Chefferie {% champ_acte epoux.quartier "medium" %}, Territoire de {% champ_acte epoux.ville_origine "medium" %},
+                Province {% if commune %}{% champ_acte commune.ville.province.nom "medium" %}{% else %}{% champ_acte "" "medium" %}{% endif %}, en République Démocratique du Congo,
+            </p>
+            <p>
+                présente le jugement déclarant la dissolution par divorce du mariage contracté le
+                {% champ_acte mariage.date_mariage|date:"j" "short" %} jour du mois de {% champ_acte mariage.date_mariage|mois_fr "medium" %}
+                deux mil {% champ_acte mariage.date_mariage|date:"Y" "short" %} à {% champ_acte mariage.lieu_mariage "long" %}.
+            </p>
+
+            <p class="acte-separateur">Entre</p>
+
+            <p>
+                le nommé {% champ_acte epoux|nom_complet_conjoint "xlong" %} âgé de
+                {% champ_acte epoux.date_naissance|age_ans "short" %} ans, profession {% champ_acte epoux.profession "long" %}, ayant
+                sa résidence principale à {% champ_acte epoux.commune_residence.nom "long" %}, sa
+                résidence temporaire à {% champ_acte epoux.numero_parcelle "long" %},
+            </p>
+
+            <p class="acte-separateur">Et</p>
+
+            <p>
+                la nommée {% champ_acte epouse|nom_complet_conjoint "xlong" %} âgée de
+                {% champ_acte epouse.date_naissance|age_ans "short" %} ans, ayant sa résidence principale à {% champ_acte epouse.commune_residence.nom "long" %},
+                sa résidence temporaire à {% champ_acte epouse.numero_parcelle "long" %},
+            </p>
+            <p>
+                prononcé par le tribunal de {% champ_acte divorce.motif "long" %},
+                en date du {% champ_acte divorce.date_divorce|date:"d/m/Y" "medium" %} à {% if commune %}{% champ_acte commune.ville.nom "medium" %}{% else %}{% champ_acte "" "medium" %}{% endif %}.
+            </p>
+        </div>
+
+        <div class="acte-signature-lieu">
+            <p>Fait à {% if commune %}{{ commune.ville.nom }}{% else %}Butembo{% endif %}, le {% champ_acte divorce.date_divorce|date:"d/m/Y" "medium" %},</p>
+            <p>L'Officier de l'État Civil ou Son Délégué</p>
+            <p class="acte-signature-nom">{% if autorite.nom %}{{ autorite.nom|upper }}{% else %}{% champ_acte "" "long" %}{% endif %}</p>
+        </div>
+    </div>
+</div>
+{% endwith %}

@@ -67,116 +67,11 @@
     </div>
 
     <div id="view-recherche-divorce" class="d-none">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h3 class="fw-bold text-dark"><i class="bi bi-search me-2"></i> Recherche de l'Acte de Mariage Référent</h3>
-                <p class="text-muted mb-0">Identifiez le mariage actif à dissoudre (empreinte, nominative ou reconnaissance faciale)</p>
-            </div>
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h3 class="fw-bold text-dark mb-0"><i class="bi bi-search me-2"></i> Identification du mariage à dissoudre</h3>
             <button type="button" class="btn btn-outline-secondary" onclick="revenirListeDivorce()"><i class="bi bi-arrow-left"></i> Annuler</button>
         </div>
-
-        <div class="card border-0 shadow-sm">
-            <div class="card-body">
-                <ul class="nav nav-pills nav-justified mb-4" id="divorceSearchTabs" role="tablist">
-                    <li class="nav-item">
-                        <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#divorce-search-empreinte" type="button">
-                            <i class="bi bi-fingerprint me-1"></i> 1. Empreintes
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#divorce-search-nominative" type="button">
-                            <i class="bi bi-person-text me-1"></i> 2. Nominative
-                        </button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#divorce-search-faciale" type="button">
-                            <i class="bi bi-camera-video me-1"></i> 3. Reconnaissance faciale
-                        </button>
-                    </li>
-                </ul>
-
-                <div class="tab-content border rounded bg-light p-4">
-                    <div class="tab-pane fade show active" id="divorce-search-empreinte">
-                        <p class="text-muted small mb-3">Les deux conjoints peuvent poser leurs empreintes pour retrouver le mariage actif.</p>
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold small">Empreinte — Époux</label>
-                                <input type="file" class="form-control form-control-sm" id="divorce-empreinte-epoux" accept="image/*,.bmp,.png,.jpg,.jpeg">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold small">Empreinte — Épouse</label>
-                                <input type="file" class="form-control form-control-sm" id="divorce-empreinte-epouse" accept="image/*,.bmp,.png,.jpg,.jpeg">
-                            </div>
-                            <div class="col-12 text-center">
-                                <button type="button" class="btn btn-primary" onclick="rechercherDivorceEmpreinte()">
-                                    <i class="bi bi-search me-1"></i> Scanner et interroger le système
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="tab-pane fade" id="divorce-search-nominative">
-                        <div class="row g-3">
-                            <div class="col-md-4"><input type="text" id="divorce-nom" class="form-control" placeholder="Nom..."></div>
-                            <div class="col-md-4"><input type="text" id="divorce-postnom" class="form-control" placeholder="Postnom..."></div>
-                            <div class="col-md-4"><input type="text" id="divorce-prenom" class="form-control" placeholder="Prénom..."></div>
-                            <div class="col-12 text-end">
-                                <button type="button" class="btn btn-dark" onclick="rechercherDivorceNominatif()">
-                                    <i class="bi bi-search me-1"></i> Comparer et filtrer le système
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="tab-pane fade" id="divorce-search-faciale">
-                        <div class="row justify-content-center">
-                            <div class="col-lg-8 text-center">
-                                <p class="text-muted small mb-3">Capturez le visage d'un des conjoints pour retrouver le mariage actif.</p>
-                                <div class="d-flex flex-wrap justify-content-center align-items-center gap-3 mb-3 p-3 bg-white rounded border">
-                                    <div class="rounded-circle overflow-hidden bg-dark border border-2 border-primary" style="width:140px;height:140px;">
-                                        <video id="divorce-facial-webcam" autoplay playsinline class="w-100 h-100" style="object-fit:cover;"></video>
-                                    </div>
-                                </div>
-                                <canvas id="divorce-facial-canvas" class="d-none"></canvas>
-                                <input type="hidden" id="divorce-facial-base64" value="">
-                                <div class="d-flex flex-wrap justify-content-center gap-2">
-                                    <button type="button" class="btn btn-outline-primary" id="divorce-facial-camera-btn">
-                                        <i class="bi bi-camera-video me-1"></i> Démarrer / Capturer
-                                    </button>
-                                    <button type="button" class="btn btn-success" id="divorce-facial-search-btn" disabled>
-                                        <i class="bi bi-person-bounding-box me-1"></i> Rechercher par visage
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="divorce-alert-zone" class="mt-3"></div>
-
-                <div class="card border-0 shadow-sm mt-4 d-none" id="divorce-resultats-mariages">
-                    <div class="card-header bg-success text-white fw-bold">
-                        <i class="bi bi-check2-square me-2"></i> Mariages actifs identifiés
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-striped align-middle mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>N° Acte</th>
-                                        <th>Époux</th>
-                                        <th>Épouse</th>
-                                        <th>Lieu</th>
-                                        <th class="text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="divorce-table-mariages"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        {% include 'mariage/partials/verif_deux_etapes.html' with verif_mode='divorce' verif_title='Identification du mariage actif (obligatoire)' verif_icon='bi-heartbreak' verif_scope_badge='Recherche nationale' verif_scope_badge_class='bg-dark' verif_url=divorce_verif_url recherche_url=divorce_recherche_url reinit_url=divorce_reinit_url verif_procedure_html='<strong>Procédure stricte (2 étapes) :</strong> <strong>① Époux</strong> puis <strong>② Épouse</strong>. Les deux conjoints doivent correspondre au <strong>même acte de mariage actif</strong> (base nationale). La cérémonie de divorce s\'ouvre ensuite automatiquement.' verif_nominative_help='<strong>Étape 1 :</strong> identifiez l\'époux sur un acte actif. <strong>Étape 2 :</strong> l\'épouse (même mariage). La recherche progressive affiche les unions actives — cliquez pour confirmer.' verif_empreinte_help='Comparaison nationale : empreinte liée à un <strong>acte de mariage actif</strong> (même logique que l\'anti-polygamie).' verif_faciale_help='Reconnaissance faciale sur l\'ensemble des <strong>mariages actifs</strong> enregistrés (toutes communes).' verif_epoux_label='Saisissez le nom ou sélectionnez un mariage actif dans la liste.' %}
     </div>
 
     <div id="view-ceremonie-divorce" class="d-none">
@@ -246,5 +141,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'mariage/js/divorce_list.js' %}"></script>
+<script src="{% static 'mariage/js/workflow_verification.js' %}?v=2"></script>
+<script src="{% static 'mariage/js/divorce_list.js' %}?v=2"></script>
 {% endblock %}

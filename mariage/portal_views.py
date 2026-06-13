@@ -104,7 +104,7 @@ class DashboardHierarchieView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        stats = stats_dashboard_general()
+        stats = stats_dashboard_general(self.request.user)
         ctx.update(stats)
         ctx['communes'] = Commune.objects.select_related('ville__province').order_by('ville__nom', 'nom')
         ctx['nb_communes'] = ctx['communes'].count()

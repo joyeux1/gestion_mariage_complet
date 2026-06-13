@@ -25,9 +25,7 @@ function showView(viewId) {
 
 function openNouveauMariageWorkflow() {
     dossierSelectionne = null;
-    document.getElementById('resultats-dossiers-container')?.classList.add('d-none');
-    document.getElementById('table-resultat-dossiers').innerHTML = '';
-    arreterWebcamFacialeMariage();
+    window._mariageDossierIdentifie = null;
     showView('view-recherche-dossier');
 }
 
@@ -37,9 +35,49 @@ function resetToListView() {
     showView('view-list-mariages');
 }
 
-function simulerScanBiometriqueMariage() {
-    executerRechercheDossier();
-    showToast('Recherche biométrique simulée : affichage des dossiers éligibles.', 'info');
+function rechercherMariageEmpreinte() {
+    const url = document.getElementById('mariage-app-container')?.dataset.rechercheEmpreinteUrl;
+    const epoux = document.getElementById('mariage-empreinte-epoux');
+    const epouse = document.getElementById('mariage-empreinte-epouse');
+
+    if (!epoux?.files?.length && !epouse?.files?.length) {
+        showToast('Chargez au moins une empreinte (époux ou épouse).', 'warning');
+        return;
+    }
+    if (!url) {
+        showToast('Configuration de recherche empreinte manquante.', 'danger');
+        return;
+    }
+
+    const formData = new FormData();
+    if (epoux?.files?.length) {
+        formData.append('scan_empreinte_epoux', epoux.files[0]);
+    }
+    if (epouse?.files?.length) {
+        formData.append('scan_empreinte_epouse', epouse.files[0]);
+    }
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
+
+    fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+        .then((response) => response.json())
+        .then((data) => {
+            if (!data.success) {
+                const msg = data.errors
+                    ? Object.values(data.errors).flat().join(' ')
+                    : 'Erreur lors de la recherche par empreinte.';
+                showToast(msg, 'danger');
+                return;
+            }
+            if (data.message) {
+                showToast(data.message, data.dossiers.length ? 'success' : 'info');
+            }
+            afficherResultatsDossiers(data.dossiers);
+        })
+        .catch(() => showToast('Erreur de connexion au serveur.', 'danger'));
 }
 
 function executerRechercheDossier() {
@@ -229,7 +267,7 @@ function afficherResultatsDossiers(dossiers) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" class="text-center py-4 text-muted">
-                    Aucun dossier validé trouvé. Créez d'abord un dossier (menu Dossiers).
+                    Aucun dossier non validé trouvé dans votre commune. Ouvrez d'abord un dossier (menu Dossiers).
                 </td>
             </tr>`;
         return;
@@ -349,6 +387,15 @@ function genererApercuAvantImpression(event) {
             showToast('Erreur de connexion au serveur.', 'danger');
         });
 }
+
+window.onMariageVerifComplete = function () {
+    const dossier = window._mariageDossierIdentifie;
+    if (dossier) {
+        selectionnerDossier(dossier);
+    } else {
+        showToast('Dossier identifié mais données incomplètes — recommencez la vérification.', 'warning');
+    }
+};
 
 document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('mariage-facial-camera-btn')?.addEventListener('click', toggleWebcamFacialeMariage);

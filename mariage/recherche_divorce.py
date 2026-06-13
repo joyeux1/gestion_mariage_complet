@@ -1,8 +1,14 @@
-"""Recherche de mariages actifs pour la procédure de divorce."""
+"""Recherche nationale de mariages actifs pour la procédure de divorce."""
 from django.db.models import Q
 from django.urls import reverse
 
-from .models import Divorce, EmpreinteDigitale, Mariage, photo_conjoint_affichage
+from .models import Divorce, Mariage, photo_conjoint_affichage
+from .services_biometrie import ReconnaissanceFacialeService
+from .verification_dossier import (
+    _catalogue_encodages_faciaux,
+    _mariage_actif_pour_conjoint,
+    _trouver_conjoints_par_empreinte,
+)
 
 
 def queryset_mariages_eligibles_divorce():
@@ -62,27 +68,67 @@ def rechercher_mariages_nominatif(nom, postnom, prenom):
     return [serialiser_mariage_divorce(m) for m in qs.distinct()[:15]]
 
 
+def _mariage_eligible_divorce_pour_conjoint(conjoint, est_epoux):
+    """Mariage actif non divorcé associé à un conjoint (recherche nationale)."""
+    mariage = _mariage_actif_pour_conjoint(conjoint, est_epoux)
+    if not mariage or mariage.statut != 'actif':
+        return None
+    if Divorce.objects.filter(mariage=mariage).exists():
+        return None
+    return mariage
+
+
 def rechercher_mariages_empreinte(fichier_epoux, fichier_epouse):
-    """Recherche par scan d'empreinte (nom de fichier ou upload)."""
-    noms = []
-    for fichier in (fichier_epoux, fichier_epouse):
-        if fichier and getattr(fichier, 'name', None):
-            noms.append(fichier.name.strip())
+    """Recherche nationale par empreinte (même logique biométrique que l'anti-polygamie)."""
+    mariages_vus = set()
+    resultats = []
 
-    if not noms:
-        return []
+    if fichier_epoux:
+        for conjoint, est_epoux in _trouver_conjoints_par_empreinte(fichier_epoux, 'epoux'):
+            mariage = _mariage_eligible_divorce_pour_conjoint(conjoint, est_epoux)
+            if mariage and mariage.pk not in mariages_vus:
+                mariages_vus.add(mariage.pk)
+                resultats.append(serialiser_mariage_divorce(mariage))
 
-    qs = queryset_mariages_eligibles_divorce()
-    empreinte_ids = set()
-    for nom in noms:
-        for emp in EmpreinteDigitale.objects.filter(empreinte__icontains=nom):
-            empreinte_ids.add(emp.pk)
+    if fichier_epouse:
+        for conjoint, est_epoux in _trouver_conjoints_par_empreinte(fichier_epouse, 'epouse'):
+            mariage = _mariage_eligible_divorce_pour_conjoint(conjoint, est_epoux)
+            if mariage and mariage.pk not in mariages_vus:
+                mariages_vus.add(mariage.pk)
+                resultats.append(serialiser_mariage_divorce(mariage))
 
-    if not empreinte_ids:
-        return []
+    return resultats[:15]
 
-    qs = qs.filter(
-        Q(epoux__empreinte_digitale_id__in=empreinte_ids)
-        | Q(epouse__empreinte_digitale_id__in=empreinte_ids)
-    ).distinct()
-    return [serialiser_mariage_divorce(m) for m in qs[:15]]
+
+def rechercher_mariages_facial(encodage_capture):
+    """Recherche nationale par reconnaissance faciale (catalogue mariages actifs)."""
+    catalogue = []
+    mariages_vus = set()
+
+    for role in ('epoux', 'epouse'):
+        for item in _catalogue_encodages_faciaux(role):
+            conjoint = item['conjoint']
+            est_epoux = item['est_epoux']
+            mariage = _mariage_eligible_divorce_pour_conjoint(conjoint, est_epoux)
+            if not mariage or mariage.pk in mariages_vus:
+                continue
+            mariages_vus.add(mariage.pk)
+            label = 'Époux' if est_epoux else 'Épouse'
+            catalogue.append({
+                'mariage': mariage,
+                'id': f"{mariage.pk}-{role}",
+                'encodage': item['encodage'],
+                'meta': {
+                    'role': role,
+                    'role_label': label,
+                    'nom_complet': f"{conjoint.nom} {conjoint.post_nom} {conjoint.prenom}".strip(),
+                },
+            })
+
+    if not catalogue:
+        return None, catalogue
+
+    correspondance = ReconnaissanceFacialeService.meilleure_correspondance(
+        encodage_capture, catalogue
+    )
+    return correspondance, catalogue

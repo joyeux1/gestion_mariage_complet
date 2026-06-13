@@ -101,8 +101,17 @@
             });
     }
 
+    function doitDeclencherRecherche() {
+        const nom = (nomInput?.value || '').trim();
+        const numero = (numeroInput?.value || '').trim();
+        return nom.length >= 2 || numero.length >= 1;
+    }
+
     function onSaisieProgressive() {
         clearTimeout(timer);
+        if (!doitDeclencherRecherche()) {
+            return;
+        }
         timer = setTimeout(lancerRecherche, 280);
     }
 
@@ -117,4 +126,9 @@
     });
 
     initPhotoThumbs();
+
+    const ligneNouveau = document.getElementById('dossier-nouveau-ligne');
+    if (ligneNouveau) {
+        ligneNouveau.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 })();

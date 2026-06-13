@@ -1,0 +1,73 @@
+{% load acte_officiel %}
+{% with commune=mariage.dossier.commune_enregistrement epoux=mariage.epoux epouse=mariage.epouse %}
+{% autorite_acte mariage.dossier as autorite %}
+<div class="acte-officiel-page">
+    <div class="acte-cadre">
+        {% include 'mariage/partials/acte_officiel_entete.html' with type='mariage' acte_titre="ACTE DE MARIAGE" numero_acte=mariage.numero_acte annee_court=mariage.date_mariage|date:"y" show_photos=True epoux=epoux epouse=epouse commune=commune %}
+
+        <div class="acte-corps acte-corps-mariage">
+            <p class="acte-ligne-date">
+                L'an deux mille {% champ_acte mariage.date_mariage|date:"Y" "short" %}{% points "long" %}le {% champ_acte mariage.date_mariage|date:"j" "short" %}{% points "long" %}Jour du mois de {% champ_acte mariage.date_mariage|mois_fr "medium" %}{% points "long" %}
+            </p>
+
+            <p>
+                Nous {% if autorite.nom %}<span class="acte-nom-officier">{{ autorite.nom|upper }}</span>{% else %}{% points "long" %}{% endif %}, {{ autorite.titre_officier }} {{ autorite.titre_fonction }}, avons procédé au jour, mois et l'an que dessus à l'inscription du mariage civil contracté entre le Nommé {% champ_acte epoux|nom_complet_conjoint "xlong" %}
+            </p>
+
+            <p>
+                Agé de {% champ_acte epoux.date_naissance|age_ans "short" %} ans, de nationalité {% champ_acte epoux.nationalite "medium" %}, Profession {% champ_acte epoux.profession "long" %} ayant sa résidence principale à {% champ_acte epoux.commune_residence.nom "medium" %} Province {% if commune %}{% champ_acte commune.ville.province.nom "medium" %}{% else %}{% points "medium" %}{% endif %}, Territoire de {% champ_acte epoux.ville_origine "medium" %} Chefferie/Secteur de {% champ_acte epoux.quartier "medium" %} Groupement {% champ_acte epoux.cellule "medium" %}, Quartier {% champ_acte epoux.quartier "medium" %} Commune {% champ_acte epoux.commune_residence.nom "medium" %} et a résidence temporaire sur (à) {% champ_acte epoux.numero_parcelle "medium" %}
+            </p>
+
+            <p class="acte-separateur">Et</p>
+
+            <p>
+                La Nommée {% champ_acte epouse|nom_complet_conjoint "xlong" %} âgée de {% champ_acte epouse.date_naissance|age_ans "short" %} ans de nationalité {% champ_acte epouse.nationalite|default:"Congolaise" "medium" %}, Profession {% champ_acte epouse.profession "long" %} ayant sa résidence principale à {% champ_acte epouse.commune_residence.nom "medium" %} Province {% if commune %}{% champ_acte commune.ville.province.nom "medium" %}{% else %}{% points "medium" %}{% endif %}, Ville {% champ_acte epouse.commune_residence.ville.nom "medium" %} et a résidence temporaire sur (à) {% champ_acte epouse.numero_parcelle "medium" %} Quartier {% champ_acte epouse.quartier "medium" %} Territoire de {% champ_acte epouse.ville_origine "medium" %} Commune {% champ_acte epouse.commune_residence.nom "medium" %} Groupement {% champ_acte epouse.cellule "medium" %}
+            </p>
+
+            <p class="acte-separateur">En présence de :</p>
+
+            {% with temoins=mariage.temoins.all %}
+            {% for temoin in temoins|slice:":2" %}
+            {% if not forloop.first %}<p class="acte-separateur">Et</p>{% endif %}
+            <p>
+                {{ forloop.counter }}. Mr (Mlle) {% champ_acte temoin|nom_complet_temoin "xlong" %} âgé de {% champ_acte temoin.date_naissance|age_ans "short" %} ans Profession {% points "medium" %} N° {% champ_acte temoin.numero_piece "short" %} Quartier {% points "medium" %} ayant sa résidence principale à {% champ_acte temoin.adresse "long" %} sa résidence temporaire {% points "medium" %} Commune {% points "medium" %} Ville {% points "medium" %}
+            </p>
+            {% empty %}
+            <p>1. Mr (Mlle) {% points "xlong" %} âgé de {% points "short" %} ans Profession {% points "medium" %} N° {% points "short" %} Quartier {% points "medium" %} ayant sa résidence principale à {% points "long" %} sa résidence temporaire {% points "medium" %} Commune {% points "medium" %} Ville {% points "medium" %}</p>
+            <p class="acte-separateur">Et</p>
+            <p>2. Mr (Mlle) {% points "xlong" %} âgé de {% points "short" %} ans Profession {% points "medium" %} N° {% points "short" %} Quartier {% points "medium" %} ayant sa résidence principale à {% points "long" %} sa résidence temporaire {% points "medium" %} Commune {% points "medium" %} Ville {% points "medium" %}</p>
+            {% endfor %}
+            {% endwith %}
+
+            <p>Tous deux ayant qualité pour donner leur consentement au mariage,</p>
+            <p>Les comparants nous ont déclaré que :</p>
+            <p>Le mariage n'a pas été contracté en contravention de la Loi N°16/008 du 15 juillet 2016 modifiant et complétant la Loi N°87-010 du 1er août 1997 portant code de la famille.</p>
+            <p>Toutes les cérémonies coutumières requises à l'existence valable du mariage ont été accomplies.</p>
+            <p>Dot Remise de {% points "xlong" %} à la Famille {% points "xlong" %}</p>
+            <p>Régimes matrimoniaux : Séparation des biens, Communauté réduite aux acquêts et la Communauté Universelle.</p>
+            <p>Les époux ont opté pour le régime de : {% champ_acte mariage.regime_matrimonial "xlong" %}</p>
+            <p>Après lecture par nous, de la présente déclaration, les comparants la signent, déclarent ne pas savoir signer et y apposent l'empreinte digitale de leur pouce gauche.</p>
+        </div>
+
+        <div class="acte-pied">
+            <div class="acte-pied-col">
+                <span class="titre">Signature ou empreinte digitale des comparants.</span>
+                <div>1. Epoux : {% points "long" %}</div>
+                <div>2. Epouse : {% points "long" %}</div>
+            </div>
+            <div class="acte-pied-col">
+                <span class="titre">Témoins</span>
+                <div class="acte-liste-temoins">
+                    {% for i in "123456" %}
+                    <div><span class="num">{{ forloop.counter }}.</span> {% points "xlong" %}</div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="acte-pied-col acte-pied-col-officier">
+                <span class="titre">L'Officier de l'Etat Civil</span>
+                <div class="zone-sceau"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endwith %}

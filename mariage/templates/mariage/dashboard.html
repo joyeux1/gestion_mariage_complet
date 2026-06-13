@@ -6,8 +6,15 @@
 {% block content %}
 <div class="container-fluid" id="dashboard-main"
      data-stats-url="{% url 'dashboard_stats_api' %}">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold"><i class="bi bi-speedometer2 me-2"></i> Tableau de Bord</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="bi bi-speedometer2 me-2"></i> Tableau de Bord</h2>
+            {% if perimetre_label %}
+            <p class="text-muted small mb-0" id="dash-perimetre-label">
+                <i class="bi bi-geo-alt me-1"></i> Périmètre : <strong>{{ perimetre_label }}</strong>
+            </p>
+            {% endif %}
+        </div>
         <div class="text-end">
             <span class="text-muted" id="dash-date-label">{{ now|date:"d F Y" }}</span>
             <br><small class="text-muted" id="dash-refresh-label"><i class="bi bi-arrow-repeat"></i> Actualisation auto.</small>

@@ -1,71 +1,16 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Acte N° {{ mariage.numero_acte }}</title>
+    <link rel="stylesheet" href="{% static 'mariage/css/acte_officiel.css' %}?v=8">
     <style>
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            padding: 12px;
-            font-family: 'Times New Roman', Georgia, serif;
-            font-size: 13px;
-            line-height: 1.5;
-            color: #222;
-            background: #fff;
-        }
-        .acte-header { text-align: center; margin-bottom: 12px; }
-        .acte-header h1 {
-            font-size: 14px;
-            margin: 0 0 4px;
-            font-weight: bold;
-        }
-        .acte-header .meta { font-size: 11px; color: #555; }
-        .acte-title {
-            font-size: 15px;
-            font-weight: bold;
-            margin: 10px 0 4px;
-            text-align: center;
-        }
-        .acte-numero { text-align: center; font-weight: bold; margin-bottom: 12px; }
-        .acte-body { text-align: justify; }
-        .acte-body p { margin: 0 0 8px; }
-        .conjoints { margin: 8px 0 8px 16px; }
-        .remarque { font-size: 11px; color: #666; font-style: italic; }
+        body { margin: 0; padding: 8px; background: #fff; }
     </style>
 </head>
 <body>
-    <div class="acte-header">
-        <h1>RÉPUBLIQUE DÉMOCRATIQUE DU CONGO</h1>
-        <div class="meta">Province du Nord-Kivu</div>
-        {% if mariage.dossier.commune_enregistrement %}
-        <div class="meta">
-            VILLE DE {{ mariage.dossier.commune_enregistrement.ville.nom|upper }}
-            — COMMUNE DE {{ mariage.dossier.commune_enregistrement.nom|upper }}
-        </div>
-        {% endif %}
-    </div>
-    <div class="acte-title">EXTRAIT D'ACTE DE MARIAGE</div>
-    <div class="acte-numero">N° {{ mariage.numero_acte }}</div>
-    <div class="acte-body">
-        <p>
-            L'an deux mille <strong>{{ mariage.date_mariage|date:"Y" }}</strong>,
-            le <strong>{{ mariage.date_mariage|date:"d" }}</strong>
-            {% if mariage.lieu_mariage %} à <strong>{{ mariage.lieu_mariage }}</strong>{% endif %},
-            ont comparu publiquement :
-        </p>
-        <div class="conjoints">
-            <p><strong>L'ÉPOUX :</strong> {{ mariage.epoux.nom }} {{ mariage.epoux.post_nom }} {{ mariage.epoux.prenom }}</p>
-            <p><strong>L'ÉPOUSE :</strong> {{ mariage.epouse.nom }} {{ mariage.epouse.post_nom }} {{ mariage.epouse.prenom }}</p>
-        </div>
-        <p>
-            Régime matrimonial : <strong>{{ mariage.regime_matrimonial|upper|default:"—" }}</strong>.
-            Ils sont unis par le mariage civil.
-        </p>
-        {% if mariage.remarque %}
-        <p class="remarque"><strong>Remarque :</strong> {{ mariage.remarque }}</p>
-        {% endif %}
-    </div>
+{% include 'mariage/partials/acte_mariage_officiel.html' with mariage=mariage user=user %}
 </body>
 </html>

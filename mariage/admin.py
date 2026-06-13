@@ -16,10 +16,11 @@ class UtilisateurAdmin(UserAdmin):
         'epoux_lie', 'epouse_lie', 'is_staff',
     )
     list_filter = ('role', 'affecte_mairie', 'commune', 'ville')
-    search_fields = ('username', 'first_name', 'last_name', 'email')
+    search_fields = ('username', 'first_name', 'last_name', 'nom', 'post_nom', 'prenom', 'email')
     fieldsets = UserAdmin.fieldsets + (
         ('Informations complémentaires', {
             'fields': (
+                'nom', 'post_nom', 'prenom',
                 'telephone', 'role', 'commune', 'ville', 'affecte_mairie',
                 'epoux_lie', 'epouse_lie',
             ),
@@ -27,7 +28,10 @@ class UtilisateurAdmin(UserAdmin):
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
         ('Informations complémentaires', {
-            'fields': ('telephone', 'role', 'commune', 'ville', 'affecte_mairie'),
+            'fields': (
+                'nom', 'post_nom', 'prenom',
+                'telephone', 'role', 'commune', 'ville', 'affecte_mairie',
+            ),
         }),
     )
 

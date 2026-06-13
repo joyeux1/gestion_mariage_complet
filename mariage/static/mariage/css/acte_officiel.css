@@ -1,0 +1,349 @@
+/* Actes officiels — A4 paysage (mariage & divorce) */
+
+.acte-officiel-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+
+.acte-officiel-page {
+    width: 297mm;
+    min-width: 297mm;
+    max-width: 297mm;
+    margin: 0 auto 1rem;
+    background: #fff;
+    color: #000;
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 10pt;
+    line-height: 1.38;
+}
+
+.acte-cadre {
+    border: 2px solid #1e4d8c;
+    outline: 1px solid #1e4d8c;
+    outline-offset: 1px;
+    padding: 6mm 8mm 5mm;
+    box-sizing: border-box;
+}
+
+/* ——— En-tête ——— */
+.acte-entete-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin-bottom: 4mm;
+}
+
+.entete-cell {
+    vertical-align: top;
+    padding: 0 4px;
+}
+
+.entete-gauche { width: 30%; }
+.entete-centre { width: 40%; text-align: center; }
+.entete-droite { width: 30%; text-align: right; }
+
+.acte-administratif {
+    font-size: 9pt;
+    line-height: 1.32;
+    margin-top: 2px;
+}
+
+.acte-administratif .ligne-ministere {
+    font-size: 8.5pt;
+    margin-bottom: 2px;
+}
+
+.acte-administratif .ligne-titre {
+    font-weight: bold;
+    font-size: 9pt;
+}
+
+.acte-centre-haut {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.acte-centre-titres {
+    text-align: center;
+}
+
+.acte-img-drapeau-inline {
+    width: 58px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.acte-droite-haut {
+    display: inline-flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.entete-drapeau-droite {
+    display: inline-block;
+    width: 58px;
+    height: 40px;
+    object-fit: contain;
+}
+
+.acte-img-embleme {
+    width: 62px;
+    max-height: 68px;
+    object-fit: contain;
+}
+
+.rdc-titre {
+    font-weight: bold;
+    font-size: 11pt;
+    line-height: 1.15;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.acte-titre-principal {
+    font-weight: bold;
+    font-size: 15pt;
+    font-family: Arial, Helvetica, sans-serif;
+    text-transform: uppercase;
+    margin: 3px 0 4px;
+    line-height: 1.1;
+}
+
+.acte-meta,
+.acte-meta-ligne {
+    font-size: 9.5pt;
+    margin-top: 2px;
+}
+
+.acte-meta-ligne {
+    white-space: normal;
+}
+
+.acte-photos-couple {
+    display: flex;
+    gap: 4px;
+}
+
+.acte-photo-box {
+    width: 22mm;
+    border: 1px solid #222;
+    text-align: center;
+    font-size: 7pt;
+    font-weight: bold;
+    background: #fff;
+}
+
+.acte-photo-box span {
+    display: block;
+    padding: 2px 0;
+    border-bottom: 1px solid #bbb;
+}
+
+.acte-photo-inner {
+    height: 28mm;
+    overflow: hidden;
+    background: #fafafa;
+}
+
+.acte-photo-inner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.acte-email {
+    text-decoration: underline;
+    font-size: 8.5pt;
+    margin-top: 2px;
+}
+
+/* ——— Pointillés et valeurs ——— */
+.acte-val {
+    border-bottom: 1px dotted #000;
+    padding: 0 2px;
+    font-weight: normal;
+}
+
+.acte-nom-officier {
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.acte-leader {
+    display: inline-block;
+    border-bottom: 1px dotted #000;
+    vertical-align: baseline;
+    height: 0.9em;
+    margin: 0 2px;
+}
+
+.acte-leader-short { width: 3em; }
+.acte-leader-medium { width: 6em; }
+.acte-leader-long { width: 10em; }
+.acte-leader-xlong { width: 16em; }
+
+.acte-vide { display: inline-block; border-bottom: 1px dotted #000; height: 0.9em; }
+.acte-vide-short { width: 3em; }
+.acte-vide-medium { width: 6em; }
+.acte-vide-long { width: 10em; }
+.acte-vide-xlong { width: 16em; }
+.acte-champ { border-bottom: 1px dotted #000; display: inline-block; }
+.acte-champ-vide { width: 6em; height: 0.9em; }
+
+/* ——— Corps ——— */
+.acte-corps {
+    text-align: justify;
+    font-size: 10pt;
+    line-height: 1.38;
+}
+
+.acte-corps p {
+    margin: 0 0 0.45em;
+    text-align: justify;
+}
+
+.acte-corps-mariage {
+    font-size: 9.5pt;
+    line-height: 1.36;
+}
+
+.acte-corps-mariage p {
+    margin-bottom: 0.35em;
+}
+
+.acte-corps-divorce {
+    font-size: 11pt;
+    line-height: 1.45;
+}
+
+.acte-corps-divorce p {
+    margin-bottom: 0.55em;
+}
+
+.acte-ligne-date {
+    margin-bottom: 0.5em !important;
+}
+
+.acte-separateur {
+    text-align: center !important;
+    font-weight: bold;
+    margin: 0.4em 0 0.45em !important;
+}
+
+.acte-corps-divorce .acte-separateur {
+    margin: 0.65em 0 !important;
+    font-size: 11pt;
+}
+
+.acte-cadre-divorce {
+    min-height: 185mm;
+    display: flex;
+    flex-direction: column;
+}
+
+.acte-cadre-divorce .acte-signature-lieu {
+    margin-top: auto;
+    padding-top: 10mm;
+}
+
+/* ——— Pied mariage ——— */
+.acte-pied {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 5mm;
+    padding-top: 3mm;
+    font-size: 9.5pt;
+    text-align: center;
+    border-top: 1px solid transparent;
+}
+
+.acte-pied-col .titre {
+    font-weight: bold;
+    text-decoration: underline;
+    margin-bottom: 14px;
+    display: block;
+}
+
+.acte-pied-col-officier .zone-sceau {
+    min-height: 40px;
+}
+
+.acte-liste-temoins {
+    text-align: left;
+    font-size: 9pt;
+    line-height: 1.5;
+    padding-left: 8px;
+}
+
+.acte-liste-temoins .num {
+    display: inline-block;
+    width: 1.2em;
+}
+
+/* ——— Pied divorce ——— */
+.acte-signature-lieu {
+    text-align: right;
+    font-size: 11pt;
+    line-height: 1.45;
+    margin-top: 8mm;
+    padding-right: 4mm;
+}
+
+.acte-signature-lieu p {
+    margin: 0 0 0.25em;
+}
+
+.acte-signature-nom {
+    margin-top: 14px !important;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+@media print {
+    html, body {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .acte-officiel-wrapper { overflow: visible; }
+
+    .sidebar, .navbar, .navbar-custom, .d-print-none, footer, #toast-container {
+        display: none !important;
+    }
+
+    .container-fluid, .row, .main-content, main {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .acte-officiel-page {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        margin: 0;
+    }
+
+    .acte-cadre {
+        page-break-inside: avoid;
+    }
+
+    @page {
+        size: A4 landscape;
+        margin: 5mm;
+    }
+}
+
+@media screen {
+    .acte-officiel-page {
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    }
+}

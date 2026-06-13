@@ -51,6 +51,9 @@ class Command(BaseCommand):
             },
             {
                 'username': 'test_bourgmestre',
+                'nom': 'Test',
+                'post_nom': '',
+                'prenom': 'Bourgmestre',
                 'first_name': 'Bourgmestre',
                 'last_name': 'Test',
                 'role': 'bourgmestre',
@@ -60,6 +63,9 @@ class Command(BaseCommand):
             },
             {
                 'username': 'test_maire',
+                'nom': 'Test',
+                'post_nom': '',
+                'prenom': 'Maire',
                 'first_name': 'Maire',
                 'last_name': 'Test',
                 'role': 'maire',
@@ -134,8 +140,11 @@ class Command(BaseCommand):
         for spec in specs:
             username = spec['username']
             defaults = {
-                'first_name': spec['first_name'],
-                'last_name': spec['last_name'],
+                'first_name': spec.get('first_name', ''),
+                'last_name': spec.get('last_name', ''),
+                'nom': spec.get('nom', spec.get('last_name', '')),
+                'post_nom': spec.get('post_nom', ''),
+                'prenom': spec.get('prenom', spec.get('first_name', '')),
                 'email': f'{username}@test.local',
                 'role': spec['role'],
                 'commune': spec.get('commune'),

@@ -1,5 +1,5 @@
 {% for dossier in dossiers %}
-<tr>
+<tr{% if dossier_nouveau_id == dossier.pk %} class="table-success" id="dossier-nouveau-ligne"{% endif %}>
     <td class="ps-4 fw-bold">
         <a href="{% url 'dossier_edit' dossier.id %}" class="text-primary text-decoration-none">{{ dossier.numero_dossier }}</a>
     </td>
@@ -86,6 +86,12 @@
 </tr>
 {% empty %}
 <tr>
-    <td colspan="8" class="text-center py-5 text-muted">Aucun dossier ne correspond à votre recherche.</td>
+    <td colspan="8" class="text-center py-5 text-muted">
+        {% if filtres_actifs %}
+        Aucun dossier ne correspond à votre recherche dans votre commune.
+        {% else %}
+        Aucun dossier enregistré pour votre commune pour le moment.
+        {% endif %}
+    </td>
 </tr>
 {% endfor %}

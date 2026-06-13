@@ -23,6 +23,13 @@
 
 {% include 'mariage/partials/filtre_liste.html' %}
 
+{% if dossier_nouveau_id %}
+<div class="alert alert-success border-0 shadow-sm mb-3 py-2 small" id="alert-dossier-nouveau">
+    <i class="bi bi-check-circle-fill me-1"></i>
+    Nouveau dossier enregistré — il apparaît en surbrillance verte dans la liste ci-dessous.
+</div>
+{% endif %}
+
 <div class="card shadow-sm border-0">
     <div class="card-body p-0"> 
         <div class="table-responsive">
@@ -64,7 +71,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'mariage/js/dossier_list.js' %}?v=20260608a"></script>
+<script src="{% static 'mariage/js/dossier_list.js' %}?v=20260611a"></script>
 <script>
 (function () {
     const modalEl = document.getElementById('modalPhotoConjoint');
